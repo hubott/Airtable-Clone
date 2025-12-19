@@ -64,6 +64,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   posts         Post[]
+  bases         Base[]
 }
 
 model VerificationToken {
@@ -72,4 +73,66 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model Base {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  user      User     @relation(fields: [ownerId], references: [id])
+  tables    Table[]
+  createdAt DateTime @default(now())
+}
+
+model Table {
+  id        String   @id @default(cuid())
+  name      String
+  baseId    String
+  base      Base     @relation(fields: [baseId], references: [id])
+  columns   Column[]
+  rows      Row[]
+  createdAt DateTime @default(now())
+}
+
+enum ColumnType {
+  TEXT
+  NUMBER
+}
+
+model Column {
+  id      String     @id @default(cuid())
+  tableId String
+  table   Table      @relation(fields: [tableId], references: [id])
+  name    String
+  type    ColumnType
+  cells   Cell[]
+  order   Int
+
+  @@index([tableId])
+}
+
+model Row {
+  id      String @id @default(cuid())
+  tableId String
+  table   Table  @relation(fields: [tableId], references: [id])
+  cells   Cell[]
+  order   Int
+
+  @@index([tableId])
+}
+
+model Cell {
+  id       String @id @default(cuid())
+  rowId    String
+  columnId String
+  row      Row    @relation(fields: [rowId], references: [id])
+  column   Column @relation(fields: [columnId], references: [id])
+
+  textValue   String?
+  numberValue Float?
+
+  @@unique([rowId, columnId])
+  @@index([columnId, textValue])
+  @@index([columnId, numberValue])
+  @@index([rowId])
 }

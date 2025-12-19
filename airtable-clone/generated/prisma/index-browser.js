@@ -166,6 +166,42 @@ exports.Prisma.VerificationTokenScalarFieldEnum = {
   expires: 'expires'
 };
 
+exports.Prisma.BaseScalarFieldEnum = {
+  id: 'id',
+  name: 'name',
+  ownerId: 'ownerId',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.TableScalarFieldEnum = {
+  id: 'id',
+  name: 'name',
+  baseId: 'baseId',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ColumnScalarFieldEnum = {
+  id: 'id',
+  tableId: 'tableId',
+  name: 'name',
+  type: 'type',
+  order: 'order'
+};
+
+exports.Prisma.RowScalarFieldEnum = {
+  id: 'id',
+  tableId: 'tableId',
+  order: 'order'
+};
+
+exports.Prisma.CellScalarFieldEnum = {
+  id: 'id',
+  rowId: 'rowId',
+  columnId: 'columnId',
+  textValue: 'textValue',
+  numberValue: 'numberValue'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -180,14 +216,22 @@ exports.Prisma.NullsOrder = {
   first: 'first',
   last: 'last'
 };
-
+exports.ColumnType = exports.$Enums.ColumnType = {
+  TEXT: 'TEXT',
+  NUMBER: 'NUMBER'
+};
 
 exports.Prisma.ModelName = {
   Post: 'Post',
   Account: 'Account',
   Session: 'Session',
   User: 'User',
-  VerificationToken: 'VerificationToken'
+  VerificationToken: 'VerificationToken',
+  Base: 'Base',
+  Table: 'Table',
+  Column: 'Column',
+  Row: 'Row',
+  Cell: 'Cell'
 };
 
 /**
