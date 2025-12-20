@@ -18,11 +18,12 @@ export const rowRouter = createTRPCRouter({
         skip: input.cursor ? 1 : 0,
         cursor: input.cursor ? { id: input.cursor } : undefined,
         include: { cells: true },
-        orderBy: { id: "asc" },
+        orderBy: { order: "asc" },
       })
 
       const nextCursor = rows.length === input.take ? rows[rows.length - 1]?.id ?? null : null
 
+      console.log("Fetched rows:", rows.length, "Next cursor:", nextCursor)
       return { rows, nextCursor }
     }),
 })
