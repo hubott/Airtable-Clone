@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server"
 
 import {
   createTRPCRouter,
@@ -16,6 +17,13 @@ export const tableRouter = createTRPCRouter({
           columns: { orderBy: { order: "asc" } },
         },
       })
+
+      if (!table) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `No table with id '${input.tableId}'`,
+        })
+      }
       return table
     }),
 })
