@@ -5,6 +5,7 @@ import { useParams } from "next/navigation"
 import { api } from "~/trpc/react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 
+
 export default function TablePage() {
   const params = useParams()
   const tableId = params.tableId as string
@@ -46,22 +47,24 @@ export default function TablePage() {
 
   /* ---------------- INFINITE SCROLL ---------------- */
   useEffect(() => {
-    const checkLoadMore = () => {
+    const checkLoadMore = async () => {
       const virtualItems = rowVirtualizer.getVirtualItems()
       const lastItem = virtualItems.at(-1)
       if (!lastItem) return
 
       if (lastItem.index >= rows.length - 5 && hasNextPage && !isFetchingNextPage) {
-        fetchNextPage()
+        await fetchNextPage()
       }
     }
 
     // Check on mount and whenever rows change
-    checkLoadMore()
+    void checkLoadMore()
 
     const el = parentRef.current
-    el?.addEventListener("scroll", checkLoadMore)
-    return () => el?.removeEventListener("scroll", checkLoadMore)
+    if (!el) return
+    const onScroll = () => { void checkLoadMore() }
+    el.addEventListener("scroll", onScroll)
+    return () => el?.removeEventListener("scroll", onScroll)
   }, [rows.length, hasNextPage, isFetchingNextPage, fetchNextPage, rowVirtualizer])
 
   // Force virtualizer to recompute when rows update
