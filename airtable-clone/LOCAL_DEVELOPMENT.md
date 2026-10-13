@@ -72,6 +72,19 @@ Cell controls:
 
 Use **← Back to dashboard** from a base and **← Back to base** from a table to navigate upward.
 
+Base/table renaming:
+
+- Choose **Rename** beside a base or table in its list, or beside the resource heading. Names must contain 1–100 characters after trimming.
+- **Save** or Enter persists the name; **Cancel** or Escape discards the draft. Failed saves preserve the draft and show an error.
+- Names update in both list and detail views; resource URLs and table contents remain unchanged.
+
+Base/table deletion:
+
+- **Delete** beside a list item or resource heading opens a browser confirmation describing the data removed. Cancel makes no request.
+- Deleting a table removes all its columns, rows and values and returns to its base. Deleting a base removes all its tables and their contents and returns to the dashboard.
+- Deletion is permanent, ownership checked, and transactional. Failed deletes preserve the resource and show an error. Table-page deletion is disabled while cell, row or column saves are pending.
+- Large datasets may take longer; full-scale database deletion performance still needs development-database verification.
+
 Row controls:
 
 - Set **Rows** beside **+ Add row(s)** to a whole number from 1 to 1,000. The default is one. A single request creates the batch together at the top and scrolls to it; failures leave the grid unchanged.

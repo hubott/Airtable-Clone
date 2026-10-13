@@ -1,3 +1,4 @@
+import { deleteTables } from "../delete-tables";
 // src/server/trpc/router/base.ts
 import { TRPCError } from "@trpc/server";
 import { resourceName } from "../resource-name";
@@ -5,6 +6,48 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 
 export const baseRouter = createTRPCRouter({
+  deleteBase: protectedProcedure
+    .input(z.object({ baseId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) =>
+      ctx.db.$transaction(
+        async (tx) => {
+          const bases = await tx.$queryRaw<
+            { id: string }[]
+          >`SELECT "id" FROM "Base" WHERE "id"=${input.baseId} AND "ownerId"=${ctx.session.user.id} FOR UPDATE`;
+          if (!bases.length)
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Base not found",
+            });
+          const tables = await tx.$queryRaw<
+            { id: string }[]
+          >`SELECT "id" FROM "Table" WHERE "baseId"=${input.baseId} ORDER BY "id" FOR UPDATE`;
+          await deleteTables(
+            tx,
+            tables.map((table) => table.id),
+          );
+          await tx.base.delete({ where: { id: input.baseId } });
+          return {
+            id: input.baseId,
+            tableIds: tables.map((table) => table.id),
+          };
+        },
+        { timeout: 120000 },
+      ),
+    ),
+
+  renameBase: protectedProcedure
+    .input(z.object({ baseId: z.string().min(1), name: resourceName }))
+    .mutation(async ({ ctx, input }) => {
+      const resources = await ctx.db.base.updateManyAndReturn({
+        where: { id: input.baseId, ownerId: ctx.session.user.id },
+        data: { name: input.name },
+      });
+      const resource = resources[0];
+      if (!resource)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Base not found" });
+      return resource;
+    }),
   getBase: protectedProcedure
     .input(z.object({ baseId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {

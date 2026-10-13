@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createTransactionMock } from "./helpers/transaction";
 import type { PrismaClient } from "../generated/prisma/index.js";
 
 process.env.SKIP_ENV_VALIDATION = "1";
@@ -219,17 +220,7 @@ function deleteSetup(
         return { id: "column" };
       },
     },
-    $transaction: async <T>(callback: (tx: unknown) => Promise<T>) => {
-      events.push("begin");
-      try {
-        const result = await callback(database);
-        events.push("commit");
-        return result;
-      } catch (error) {
-        events.push("rollback");
-        throw error;
-      }
-    },
+    $transaction: createTransactionMock((): unknown => database, events, true),
   };
   const caller = appRouter.createCaller({
     db: database as unknown as PrismaClient,

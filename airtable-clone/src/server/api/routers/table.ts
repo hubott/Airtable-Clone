@@ -1,3 +1,4 @@
+import { deleteTables } from "../delete-tables";
 import { resourceName } from "../resource-name";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -5,6 +6,40 @@ import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 
 export const tableRouter = createTRPCRouter({
+  deleteTable: protectedProcedure
+    .input(z.object({ tableId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) =>
+      ctx.db.$transaction(
+        async (tx) => {
+          const tables = await tx.$queryRaw<{ id: string; baseId: string }[]>`
+      SELECT t."id",t."baseId" FROM "Table" t JOIN "Base" b ON b."id"=t."baseId"
+      WHERE t."id"=${input.tableId} AND b."ownerId"=${ctx.session.user.id} FOR UPDATE OF t
+    `;
+          const table = tables[0];
+          if (!table)
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Table not found",
+            });
+          await deleteTables(tx, [table.id]);
+          return table;
+        },
+        { timeout: 120000 },
+      ),
+    ),
+
+  renameTable: protectedProcedure
+    .input(z.object({ tableId: z.string().min(1), name: resourceName }))
+    .mutation(async ({ ctx, input }) => {
+      const resources = await ctx.db.table.updateManyAndReturn({
+        where: { id: input.tableId, base: { ownerId: ctx.session.user.id } },
+        data: { name: input.name },
+      });
+      const resource = resources[0];
+      if (!resource)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Table not found" });
+      return resource;
+    }),
   createTable: protectedProcedure
     .input(z.object({ baseId: z.string().min(1), name: resourceName }))
     .mutation(async ({ ctx, input }) =>

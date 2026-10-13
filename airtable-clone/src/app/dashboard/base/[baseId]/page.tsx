@@ -4,6 +4,8 @@
 import CreateResourceForm from "~/app/_components/CreateResourceForm";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import DeleteResourceButton from "~/app/_components/DeleteResourceButton";
+import ResourceNameEditor from "~/app/_components/ResourceNameEditor";
 import LoadingSpinner from "~/app/_components/LoadingSpinner";
 import { api } from "~/trpc/react";
 
@@ -44,7 +46,13 @@ export default function BasePage() {
       >
         ← Back to dashboard
       </Link>
-      <h1 className="mb-4 text-2xl font-bold">{base.name}</h1>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <h1 className="min-w-0 truncate text-2xl font-bold" title={base.name}>
+          {base.name}
+        </h1>
+        <ResourceNameEditor resource="base" id={base.id} name={base.name} />
+        <DeleteResourceButton resource="base" id={base.id} name={base.name} />
+      </div>
       <CreateResourceForm
         resource="table"
         onCreate={async (name) => {
@@ -64,13 +72,27 @@ export default function BasePage() {
       )}
       <ul className="space-y-2">
         {tables?.map((table) => (
-          <li key={table.id}>
+          <li
+            key={table.id}
+            className="flex flex-wrap items-center gap-2 rounded border bg-white p-2"
+          >
             <Link
               href={`/dashboard/table/${table.id}`}
-              className="block rounded border p-3 hover:bg-gray-100"
+              className="min-w-0 flex-1 rounded p-2 hover:bg-gray-100"
+              title={table.name}
             >
-              {table.name}
+              <span className="block truncate">{table.name}</span>
             </Link>
+            <ResourceNameEditor
+              resource="table"
+              id={table.id}
+              name={table.name}
+            />
+            <DeleteResourceButton
+              resource="table"
+              id={table.id}
+              name={table.name}
+            />
           </li>
         ))}
       </ul>

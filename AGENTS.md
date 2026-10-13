@@ -17,6 +17,8 @@ The application lives in `airtable-clone/` relative to this file. Run npm, Prism
 - Columns support only TEXT and NUMBER. Cells contain nullable `textValue` and `numberValue`; reset the inactive field when saving. Empty text and blank numeric input clear the value; preserve nonempty text whitespace.
 - `LoadingSpinner.tsx` provides a centered viewport loading state and a compact inline variant, with accessible status text and reduced-motion support. Dashboard routes use `loading.tsx` for transitions and the same spinner for query loading; additional row fetching uses the inline variant.
 - `/` is the application login page, with direct Google sign-in and a dashboard link for signed-in users. Root layout renders `AppHeader` with dashboard navigation and sign-out on every page. `src/app/dashboard/layout.tsx` redirects signed-out visitors to `/`; protected tRPC procedures and ownership checks remain mandatory. NextAuth sign-in/error pages point to `/`. Auth buttons show pending/failure states and use full-page redirects after sign-in/out.
+- `base.deleteBase` / `table.deleteTable` authorize and lock the resource, lock child tables/columns/rows, and delete dependent cells, rows, columns and tables in a transaction. `DeleteResourceButton.tsx` uses browser confirmation explaining permanent data removal, preserves resources on failure, removes deleted query caches, and navigates to the surviving parent. No cascade migration or production test deletion is required.
+- `base.renameBase` and `table.renameTable` validate names and apply owner filters directly in atomic updates. `ResourceNameEditor.tsx` offers Save/Enter and Cancel/Escape with pending/error feedback. It updates name fields in list and detail caches while preserving IDs, table membership and existing metadata. Rename controls appear in lists and resource headings.
 - Dashboard and base pages use `CreateResourceForm.tsx` for validated creation, pending/error feedback and navigation to the result. `base.getBase` distinguishes empty owned bases from inaccessible ones. `table.createTable` locks the owned base and atomically creates a Name/TEXT column and one blank row. Base/table names are trimmed and limited to 1–100 characters.
 - Routes: `/dashboard`, `/dashboard/base/[baseId]`, `/dashboard/table/[tableId]`. Shared client UI lives in `src/app/_components/`.
 - The table page fetches ordered columns with `getTableWithColumns` and cursor-paginated rows with `getRows`. Rows expose `cellsByColumnId`. Pagination uses `(order, id)` value boundaries scoped to the owned table, so deleting a cursor row does not break infinite scrolling.
@@ -26,7 +28,7 @@ The application lives in `airtable-clone/` relative to this file. Run npm, Prism
 - `column.renameColumn` applies ownership checks in an atomic `updateManyAndReturn` write, with the same trimmed 1–100 character name validation as creation. `ColumnHeader.tsx` supports click-to-rename, Enter/Save, Escape/Cancel and error feedback; only confirmed names update the metadata cache.
 - `column.createColumn` validates ownership and locks the table before allocating the next column order. Names are trimmed and limited to 1–100 characters; types are TEXT/NUMBER. `AddColumnForm.tsx` updates the metadata cache after success. Existing rows are not rewritten; cells remain absent until edited.
 - `row.createRows` creates 1–1,000 rows per request with `createManyAndReturn`, under the owned table lock. It reserves a contiguous range before the first row, rejects integer underflow and returns rows in order. The toolbar count defaults to one; cached insertion preserves existing pagination boundaries.
-- Row creation locks the owned table and allocates `first.order - 1` so new rows appear at the top, with empty cells created lazily by cell upserts. Row deletion locks the owned row and explicitly deletes its cells in the same transaction. Row controls wait for server confirmation before updating cached pages.
+- Single and bulk row creation share `reserveRowOrder` in the row router for ownership, table locking and integer-boundary checks. Row creation locks the owned table and allocates `first.order - 1` so new rows appear at the top, with empty cells created lazily by cell upserts. Row deletion locks the owned row and explicitly deletes its cells in the same transaction. Row controls wait for server confirmation before updating cached pages.
 - Columns render at 240px each in a horizontally scrollable table, with an 88px sticky row-control gutter. Header and body widths must remain synchronized. Keyboard focus adjusts horizontal scrolling to keep the target cell visible beyond the sticky gutter.
 - TanStack Virtual renders 36px rows. The current grid fetches 200 rows per page and overscans 12. Measure performance before changing these settings; keep stable row IDs as React and virtualizer keys. Memoize `getItemKey` and keep `useFlushSync: false` for React 19 compatibility.
 - `EditableCell.tsx` owns edit drafts and is memoized. The table page owns async saves and optimistic updates so writes and errors survive individual cells unmounting. `src/utils/cell-cache.ts` updates only the affected cell; rollback must not restore an entire stale page snapshot.
@@ -66,8 +68,26 @@ From the application directory:
 1. Complete editable TEXT/NUMBER cells: safe saves, validation, clearing values, optimistic updates, rollback, keyboard interaction and responsive rendering. Verify in a real authenticated browser with a development database.
 2. Row creation/deletion and stable ordering are implemented. Arrow and Tab keyboard navigation are implemented, including virtualized rows and loading the next page. Single-cell copy/paste is implemented. The next phase is column management; multi-cell range selection and paste remain in the advanced spreadsheet phase.
 3. Column creation, renaming and confirmed deletion are implemented. Safe Text/Number type changes are implemented with previews and atomic conversion. Column reordering is implemented through accessible left/right header controls. Core column management is complete; additional types remain future work.
-4. Base and table creation from the UI is implemented on `feat/base-table-management`. Next: base/table rename and confirmed deletion.
+4. Base and table creation from the UI is implemented on `feat/base-table-management`. Base and table renaming are implemented. Confirmed deletion is implemented. Core Phase 4 base/table management is complete.
 5. Sorting, filtering, search, resizing, range selection and copy/paste; validate large-dataset performance.
 6. Portfolio polish: consistent UI, responsive design, useful tests, deployment, screenshots and a professional README.
 
 Stay within the phase requested by the user. Explain what changed, why, what was verified and any practical limitations.
+
+
+## SonarQube Quality Assurance
+
+This project uses SonarQube Cloud.
+
+- Consult SonarQube MCP findings when investigating
+  code quality, maintainability or security issues.
+- Review relevant findings before substantial refactoring.
+- Avoid unnecessary code duplication, particularly in
+  tRPC routers, React components and database logic.
+- Maintain the project's quality gate requirements,
+  including a maximum of 3% duplicated new code.
+- Do not weaken quality gates or suppress findings
+  without explicit approval.
+- After changes, run tests, ESLint and TypeScript checks.
+- When a new SonarQube analysis is available, verify
+  its quality gate status.

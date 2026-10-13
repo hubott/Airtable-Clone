@@ -3,6 +3,8 @@
 
 import { useRouter } from "next/navigation";
 import CreateResourceForm from "~/app/_components/CreateResourceForm";
+import DeleteResourceButton from "~/app/_components/DeleteResourceButton";
+import ResourceNameEditor from "~/app/_components/ResourceNameEditor";
 import LoadingSpinner from "~/app/_components/LoadingSpinner";
 import { api } from "~/trpc/react";
 import Link from "next/link";
@@ -38,13 +40,23 @@ export default function Dashboard() {
       )}
       <ul className="space-y-2">
         {bases?.map((base) => (
-          <li key={base.id}>
+          <li
+            key={base.id}
+            className="flex flex-wrap items-center gap-2 rounded border bg-white p-2"
+          >
             <Link
               href={`/dashboard/base/${base.id}`}
-              className="block rounded border p-3 hover:bg-gray-100"
+              className="min-w-0 flex-1 rounded p-2 hover:bg-gray-100"
+              title={base.name}
             >
-              {base.name}
+              <span className="block truncate">{base.name}</span>
             </Link>
+            <ResourceNameEditor resource="base" id={base.id} name={base.name} />
+            <DeleteResourceButton
+              resource="base"
+              id={base.id}
+              name={base.name}
+            />
           </li>
         ))}
       </ul>

@@ -1,6 +1,36 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import type { Prisma } from "~/../generated/prisma";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
+
+// Called inside the insertion transaction; the table lock serializes order allocation.
+async function reserveRowOrder(
+  tx: Prisma.TransactionClient,
+  tableId: string,
+  ownerId: string,
+  count: number,
+) {
+  const tables = await tx.$queryRaw<{ id: string }[]>`
+    SELECT t."id" FROM "Table" t
+    JOIN "Base" b ON b."id" = t."baseId"
+    WHERE t."id" = ${tableId} AND b."ownerId" = ${ownerId}
+    FOR UPDATE OF t
+  `;
+  if (!tables.length)
+    throw new TRPCError({ code: "NOT_FOUND", message: "Table not found" });
+  const first = await tx.row.findFirst({
+    where: { tableId },
+    orderBy: [{ order: "asc" }, { id: "asc" }],
+    select: { order: true },
+  });
+  const start = first ? first.order - count : 0;
+  if (start < -2147483648)
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "Row order limit reached",
+    });
+  return start;
+}
 
 export const rowRouter = createTRPCRouter({
   createRows: protectedProcedure
@@ -12,26 +42,12 @@ export const rowRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) =>
       ctx.db.$transaction(async (tx) => {
-        const tables = await tx.$queryRaw<{ id: string }[]>`
-        SELECT t."id" FROM "Table" t JOIN "Base" b ON b."id"=t."baseId"
-        WHERE t."id"=${input.tableId} AND b."ownerId"=${ctx.session.user.id} FOR UPDATE OF t
-      `;
-        if (!tables.length)
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Table not found",
-          });
-        const first = await tx.row.findFirst({
-          where: { tableId: input.tableId },
-          orderBy: [{ order: "asc" }, { id: "asc" }],
-          select: { order: true },
-        });
-        const start = first ? first.order - input.count : 0;
-        if (start < -2147483648)
-          throw new TRPCError({
-            code: "CONFLICT",
-            message: "Row order limit reached",
-          });
+        const start = await reserveRowOrder(
+          tx,
+          input.tableId,
+          ctx.session.user.id,
+          input.count,
+        );
         const rows = await tx.row.createManyAndReturn({
           data: Array.from({ length: input.count }, (_, index) => ({
             tableId: input.tableId,
@@ -47,30 +63,14 @@ export const rowRouter = createTRPCRouter({
     .input(z.object({ tableId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) =>
       ctx.db.$transaction(async (tx) => {
-        // Lock this owned table so concurrent inserts cannot allocate the same order.
-        const tables = await tx.$queryRaw<{ id: string }[]>`
-        SELECT t."id" FROM "Table" t
-        JOIN "Base" b ON b."id" = t."baseId"
-        WHERE t."id" = ${input.tableId} AND b."ownerId" = ${ctx.session.user.id}
-        FOR UPDATE OF t
-      `;
-        if (!tables.length)
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Table not found",
-          });
-        const first = await tx.row.findFirst({
-          where: { tableId: input.tableId },
-          orderBy: [{ order: "asc" }, { id: "asc" }],
-          select: { order: true },
-        });
-        if (first && first.order <= -2147483648)
-          throw new TRPCError({
-            code: "CONFLICT",
-            message: "Row order limit reached",
-          });
+        const order = await reserveRowOrder(
+          tx,
+          input.tableId,
+          ctx.session.user.id,
+          1,
+        );
         const row = await tx.row.create({
-          data: { tableId: input.tableId, order: first ? first.order - 1 : 0 },
+          data: { tableId: input.tableId, order },
         });
         return { ...row, cellsByColumnId: {} };
       }),

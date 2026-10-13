@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { createTransactionMock } from "./helpers/transaction";
 import type { PrismaClient } from "../generated/prisma/index.js";
 import { convertColumnValue } from "../src/utils/column-conversion";
 process.env.SKIP_ENV_VALIDATION = "1";
@@ -97,16 +98,7 @@ function setup(
       events.push("values");
       return 1;
     },
-    $transaction: async <T>(callback: (tx: unknown) => Promise<T>) => {
-      try {
-        const result = await callback(db);
-        events.push("commit");
-        return result;
-      } catch (error) {
-        events.push("rollback");
-        throw error;
-      }
-    },
+    $transaction: createTransactionMock((): unknown => db, events),
   };
   return {
     caller: appRouter.createCaller({
