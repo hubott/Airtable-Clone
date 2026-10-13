@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useRef, useState } from "react";
+import type { CellDirection } from "~/utils/cell-navigation";
 import { parseCellValue } from "~/utils/cell-value";
 
 type Props = {
@@ -11,6 +12,11 @@ type Props = {
   value: string | number | null;
   width: number | string;
   disabled?: boolean;
+  onNavigate?: (
+    rowId: string,
+    columnId: string,
+    direction: CellDirection,
+  ) => boolean;
   onSave: (
     rowId: string,
     columnId: string,
@@ -33,6 +39,7 @@ export const EditableCell = memo(function EditableCell({
   width,
   onSave,
   disabled = false,
+  onNavigate,
 }: Props) {
   const cellRef = useRef<HTMLTableCellElement>(null);
   const savingRef = useRef(false);
@@ -54,7 +61,7 @@ export const EditableCell = memo(function EditableCell({
     cellRef.current?.focus();
   }
 
-  async function save() {
+  async function save(direction?: CellDirection) {
     if (savingRef.current || disabled) return;
     try {
       parseCellValue(type, draft);
@@ -64,6 +71,7 @@ export const EditableCell = memo(function EditableCell({
     }
     if (draft === String(value ?? "")) {
       cancel();
+      if (direction) onNavigate?.(rowId, columnId, direction);
       return;
     }
     savingRef.current = true;
@@ -73,6 +81,8 @@ export const EditableCell = memo(function EditableCell({
     try {
       await onSave(rowId, columnId, type, draft);
       setError(null);
+      if (direction && document.activeElement === cellRef.current)
+        onNavigate?.(rowId, columnId, direction);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not save cell");
     } finally {
@@ -84,6 +94,8 @@ export const EditableCell = memo(function EditableCell({
   return (
     <td
       ref={cellRef}
+      data-row-id={rowId}
+      data-column-id={columnId}
       tabIndex={disabled ? -1 : 0}
       aria-disabled={disabled}
       aria-label={`${columnName}: ${value ?? "empty"}`}
@@ -101,6 +113,27 @@ export const EditableCell = memo(function EditableCell({
       }}
       onDoubleClick={startEditing}
       onKeyDown={(event) => {
+        if (
+          disabled ||
+          editing ||
+          event.ctrlKey ||
+          event.metaKey ||
+          event.altKey
+        )
+          return;
+        const directions: Record<string, CellDirection> = {
+          ArrowUp: "up",
+          ArrowDown: "down",
+          ArrowLeft: "left",
+          ArrowRight: "right",
+          Tab: event.shiftKey ? "previous" : "next",
+        };
+        const direction = directions[event.key];
+        if (direction) {
+          const handled = onNavigate?.(rowId, columnId, direction);
+          if (handled || event.key !== "Tab") event.preventDefault();
+          return;
+        }
         if (!editing && event.key === "Enter") {
           event.preventDefault();
           startEditing();
@@ -127,6 +160,15 @@ export const EditableCell = memo(function EditableCell({
           }}
           onKeyDown={(event) => {
             event.stopPropagation();
+            if (
+              event.key === "Tab" &&
+              !event.ctrlKey &&
+              !event.metaKey &&
+              !event.altKey
+            ) {
+              event.preventDefault();
+              void save(event.shiftKey ? "previous" : "next");
+            }
             if (event.key === "Enter") {
               event.preventDefault();
               void save();

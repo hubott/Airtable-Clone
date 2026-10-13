@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "~/trpc/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import {
+  getCellDestination,
+  type CellDirection,
+} from "~/utils/cell-navigation";
 import { EditableCell } from "~/app/_components/EditableCell";
 import { prependCachedRow, removeCachedRow } from "~/utils/row-cache";
 import { parseCellValue } from "~/utils/cell-value";
@@ -12,6 +16,11 @@ import { replaceCachedCell, type CellValue } from "~/utils/cell-cache";
 export default function TablePage() {
   const params = useParams();
   const tableId = params.tableId as string;
+  const [focusTarget, setFocusTarget] = useState<{
+    rowId: string;
+    columnId: string;
+  } | null>(null);
+  const navigationRequest = useRef(0);
   const parentRef = useRef<HTMLDivElement>(null);
 
   const utils = api.useUtils();
@@ -165,6 +174,84 @@ export default function TablePage() {
     useFlushSync: false,
   });
 
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const navigateCell = useCallback(
+    (rowId: string, columnId: string, direction: CellDirection) => {
+      if (rowOperation.current || !table) return false;
+      const destination = getCellDestination(
+        rows.findIndex((row) => row.id === rowId),
+        table.columns.findIndex((column) => column.id === columnId),
+        direction,
+        rows.length,
+        table.columns.length,
+        !!hasNextPage,
+      );
+      if (!destination) return false;
+      const column = table.columns[destination.column];
+      if (!column) return false;
+      const request = ++navigationRequest.current;
+      const row = rows[destination.row];
+      if (row) setFocusTarget({ rowId: row.id, columnId: column.id });
+      else {
+        const source = document.activeElement;
+        void fetchNextPage({ cancelRefetch: false })
+          .then((result) => {
+            if (
+              request !== navigationRequest.current ||
+              source !== document.activeElement
+            )
+              return;
+            const nextRow = result.data?.pages.flatMap(
+              (page) => page.formattedRows,
+            )[destination.row];
+            if (nextRow)
+              setFocusTarget({ rowId: nextRow.id, columnId: column.id });
+            else if (result.error)
+              setRowError("Could not load the next row. Try again.");
+          })
+          .catch(() => setRowError("Could not load the next row. Try again."));
+      }
+      return true;
+    },
+    [rows, table, hasNextPage, fetchNextPage],
+  );
+
+  useEffect(() => {
+    if (!focusTarget || rowBusy) return;
+    const index = rows.findIndex((row) => row.id === focusTarget.rowId);
+    if (index < 0) {
+      setFocusTarget(null);
+      return;
+    }
+    const viewport = parentRef.current;
+    if (!viewport) return;
+    const headerHeight = viewport.querySelector("thead")?.offsetHeight ?? 0;
+    const rowTop = index * 36;
+    const rowBottom = rowTop + 36;
+    // Fixed-height rows let us scroll once, without scrollToIndex's retry loop.
+    if (rowTop < viewport.scrollTop) rowVirtualizer.scrollToOffset(rowTop);
+    else if (
+      rowBottom >
+      viewport.scrollTop + viewport.clientHeight - headerHeight
+    )
+      rowVirtualizer.scrollToOffset(
+        rowBottom - viewport.clientHeight + headerHeight,
+      );
+    const cell = Array.from(
+      parentRef.current?.querySelectorAll<HTMLTableCellElement>(
+        "td[data-row-id]",
+      ) ?? [],
+    ).find(
+      (element) =>
+        element.dataset.rowId === focusTarget.rowId &&
+        element.dataset.columnId === focusTarget.columnId,
+    );
+    if (cell) {
+      cell.focus({ preventScroll: true });
+      setFocusTarget(null);
+    }
+  }, [focusTarget, rowBusy, rows, virtualItems, rowVirtualizer]);
+
   /* ---------------- INFINITE SCROLL ---------------- */
   useEffect(() => {
     const checkLoadMore = async () => {
@@ -216,7 +303,8 @@ export default function TablePage() {
       <h1 className="mb-2 text-xl font-semibold">{table.name}</h1>
       <p className="mb-2 text-sm text-gray-600">
         Click to select. Double-click or press Enter to edit. Enter saves;
-        Escape or leaving the cell cancels.
+        Escape or clicking away cancels. Arrows move between cells;
+        Tab/Shift+Tab move forward/back and save while editing.
       </p>
       <p role="status" className="mb-2 min-h-5 text-sm text-gray-600">
         {pendingCount > 0
@@ -300,6 +388,10 @@ export default function TablePage() {
 
       <div
         ref={parentRef}
+        onPointerDown={() => {
+          navigationRequest.current++;
+          setFocusTarget(null);
+        }}
         className="relative h-[80vh] overflow-auto border border-gray-300"
       >
         <table className="w-full table-fixed border-collapse border border-gray-300">
@@ -315,12 +407,21 @@ export default function TablePage() {
               {table.columns.map((col) => (
                 <th
                   key={col.id}
+                  scope="col"
+                  title={
+                    col.type === "TEXT"
+                      ? "Accepts text, numbers, and symbols"
+                      : "Accepts numbers only"
+                  }
                   className="border border-gray-300 px-2 py-1 text-left"
                   style={{
                     width: `calc((100% - 88px) / ${table.columns.length})`,
                   }}
                 >
-                  {col.name}
+                  <span>{col.name}</span>
+                  <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-normal text-gray-600">
+                    {col.type === "TEXT" ? "Text" : "Numbers only"}
+                  </span>
                 </th>
               ))}
             </tr>
@@ -332,7 +433,7 @@ export default function TablePage() {
               position: "relative",
             }}
           >
-            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            {virtualItems.map((virtualRow) => {
               const row = rows[virtualRow.index];
               if (!row) return null;
 
@@ -389,6 +490,7 @@ export default function TablePage() {
                         width={`calc((100% - 88px) / ${table.columns.length})`}
                         disabled={rowBusy}
                         onSave={saveCell}
+                        onNavigate={navigateCell}
                       />
                     );
                   })}

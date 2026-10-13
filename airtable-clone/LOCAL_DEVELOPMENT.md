@@ -61,7 +61,10 @@ Cell controls:
 - Click a cell to focus/select it.
 - Double-click or press Enter to edit.
 - Enter saves; Escape cancels.
-- Moving focus away (including Tab) cancels an unsaved draft.
+- Clicking away cancels an unsaved draft.
+- Arrow keys move between selected cells. Tab/Shift+Tab move forward/backward and wrap across rows. At table boundaries, Tab on a selected cell follows normal browser navigation.
+- While editing, Tab/Shift+Tab save before moving. Invalid values stay in the editor; failed saves restore the old value and keep focus on the original cell. Arrow keys move the text cursor normally.
+- Navigation scrolls offscreen rows into view and fetches the next page when needed. After editing the first/last cell with Tab, press Tab again to resume normal browser focus navigation if there is no adjacent cell.
 - Empty text or whitespace-only numeric input clears the cell. Invalid numbers stay in the editor with an error.
 - Saving is optimistic. Failed writes restore that cell's previous value and show an error above the grid; edit again to retry.
 
