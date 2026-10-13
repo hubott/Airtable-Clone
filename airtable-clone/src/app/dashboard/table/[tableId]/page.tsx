@@ -14,7 +14,7 @@ import {
   type CellDirection,
 } from "~/utils/cell-navigation";
 import { EditableCell } from "~/app/_components/EditableCell";
-import { prependCachedRow, removeCachedRow } from "~/utils/row-cache";
+import { prependCachedRows, removeCachedRow } from "~/utils/row-cache";
 import { parseCellValue } from "~/utils/cell-value";
 import {
   replaceCachedCell,
@@ -37,7 +37,8 @@ export default function TablePage() {
 
   const utils = api.useUtils();
   const { mutateAsync } = api.cell.updateCell.useMutation();
-  const { mutateAsync: createRow } = api.row.createRow.useMutation();
+  const { mutateAsync: createRows } = api.row.createRows.useMutation();
+  const [rowCount, setRowCount] = useState("1");
   const { mutateAsync: deleteRow } = api.row.deleteRow.useMutation();
   const { mutateAsync: deleteColumn } = api.column.deleteColumn.useMutation();
   const [reordering, setReordering] = useState(false);
@@ -125,6 +126,14 @@ export default function TablePage() {
 
   async function manageRow(action: "create" | "delete", rowId?: string) {
     if (rowOperation.current || pendingCells.current.size) return;
+    const count = Number(rowCount);
+    if (
+      action === "create" &&
+      (!Number.isInteger(count) || count < 1 || count > 1000)
+    ) {
+      setRowError("Enter a whole number of rows from 1 to 1,000.");
+      return;
+    }
     rowOperation.current = true;
     setRowBusy(true);
     setRowError(null);
@@ -132,9 +141,9 @@ export default function TablePage() {
     try {
       await utils.row.getRows.cancel(query);
       if (action === "create") {
-        const row = await createRow({ tableId });
+        const createdRows = await createRows({ tableId, count });
         utils.row.getRows.setInfiniteData(query, (data) =>
-          prependCachedRow(data, row),
+          prependCachedRows(data, createdRows),
         );
         parentRef.current?.scrollTo({ top: 0 });
       } else if (rowId) {
@@ -538,15 +547,39 @@ export default function TablePage() {
           </button>
         </div>
       )}
-      <div className="mb-3 flex items-center gap-3">
+      <form
+        className="mb-3 flex flex-wrap items-center gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void manageRow("create");
+        }}
+      >
         <button
-          type="button"
+          type="submit"
           disabled={rowBusy || columnBusy || pendingCount > 0}
-          onClick={() => void manageRow("create")}
           className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50 disabled:opacity-50"
         >
-          {rowBusy ? "Updating rows…" : "+ Add row"}
+          {rowBusy
+            ? "Updating rows…"
+            : Number(rowCount) === 1
+              ? "+ Add row"
+              : "+ Add rows"}
         </button>
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          Rows
+          <input
+            aria-label="Number of rows to add"
+            type="number"
+            min={1}
+            max={1000}
+            step={1}
+            required
+            value={rowCount}
+            disabled={rowBusy || columnBusy || pendingCount > 0}
+            onChange={(event) => setRowCount(event.target.value)}
+            className="w-24 rounded border border-slate-300 bg-white px-2 py-1"
+          />
+        </label>
         <InfoTooltip label="Row management tips">
           <p>
             New rows appear at the top. Use the trash icon beside a row number
@@ -554,7 +587,7 @@ export default function TablePage() {
           </p>
           <p>Finish pending cell saves before adding or deleting rows.</p>
         </InfoTooltip>
-      </div>
+      </form>
       <div className="mb-3">
         <AddColumnForm tableId={tableId} />
       </div>
