@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import LoadingSpinner from "~/app/_components/LoadingSpinner";
 import { api } from "~/trpc/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -294,7 +295,8 @@ export default function TablePage() {
   /* ---------------- LOADING STATES ---------------- */
   if (tableError || rowsError)
     return <div role="alert">{tableError?.message ?? rowsError?.message}</div>;
-  if (tableLoading || rowsLoading) return <div>Loading…</div>;
+  if (tableLoading || rowsLoading)
+    return <LoadingSpinner label="Loading your table…" />;
   if (!table) return <div>Table not found</div>;
 
   /* ---------------- RENDER ---------------- */
@@ -502,9 +504,7 @@ export default function TablePage() {
         </table>
 
         {isFetchingNextPage && (
-          <div className="py-2 text-center text-sm text-gray-500">
-            Loading more…
-          </div>
+          <LoadingSpinner label="Loading more rows…" fullPage={false} />
         )}
       </div>
     </div>
