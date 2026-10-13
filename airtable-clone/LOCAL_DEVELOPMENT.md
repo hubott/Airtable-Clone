@@ -78,6 +78,19 @@ Row controls:
 - Finish pending cell saves before adding or deleting rows. Cell editing is disabled briefly during row operations.
 - Pagination uses `(order, id)` boundaries, so deleting the last row of a fetched page does not break loading the next page.
 
+The grid supports horizontal scrolling with 240px-wide columns, keeping the row-number/delete gutter pinned. Arrow/Tab navigation scrolls the selected column into view. Rows remain virtualized for vertical scrolling.
+
+Column controls:
+
+- **+ Add column** opens a form for a name (1–100 characters) and Text/Numbers only input type.
+- **Create column** appends the column to the right. Existing rows start with empty values, and cells are created when edited.
+- Failed creation preserves the form and shows an error. **Cancel** closes the form without creating a column.
+- Click a column name (with its pencil icon) to rename it. Enter or **Save** persists the name; Escape or **Cancel** discards the draft. Failed saves keep the editor open and preserve the existing header name.
+- The trash icon in a column header opens confirmation to delete that column and all its values. Cancel preserves it; failed deletion leaves the grid intact. Other columns and rows are preserved, including when deleting the last column.
+- Click a header’s **Text** or **Numbers only** badge to preview a type change. Invalid values block confirmation and show examples; correct them and choose **Refresh preview**. Confirmation converts all stored values together, preserves blanks and refreshes rows from the top. Conversion to numbers loses text formatting such as leading zeros and uses floating-point precision. Cancel leaves data unchanged.
+- Use the **← / →** buttons in column headers to move columns one position left/right. Boundary moves are disabled. Names, types and values move together; failures preserve the current order and show an error. Keyboard navigation follows the new column order.
+- No schema migration is required for column creation or renaming.
+
 ## Verify
 
 ```sh

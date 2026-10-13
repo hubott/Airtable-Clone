@@ -104,7 +104,7 @@ export const EditableCell = memo(function EditableCell({
       title={
         error ?? (saving ? "Saving…" : "Double-click or press Enter to edit")
       }
-      className={`relative h-full min-w-0 border border-gray-300 px-2 py-1 focus-within:z-10 focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-blue-500 ${error ? "bg-red-50" : saving ? "bg-blue-50" : "bg-white"}`}
+      className={`relative h-full min-w-0 shrink-0 border border-gray-300 px-2 py-1 focus-within:z-10 focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-blue-500 ${error ? "bg-red-50" : saving ? "bg-blue-50" : "bg-white"}`}
       style={{
         width: typeof width === "number" ? `${width}%` : width,
         minHeight: 36,

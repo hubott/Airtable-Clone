@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import ColumnHeader from "~/app/_components/ColumnHeader";
+import AddColumnForm from "~/app/_components/AddColumnForm";
 import InfoTooltip from "~/app/_components/InfoTooltip";
 import LoadingSpinner from "~/app/_components/LoadingSpinner";
 import { api } from "~/trpc/react";
@@ -14,7 +16,14 @@ import {
 import { EditableCell } from "~/app/_components/EditableCell";
 import { prependCachedRow, removeCachedRow } from "~/utils/row-cache";
 import { parseCellValue } from "~/utils/cell-value";
-import { replaceCachedCell, type CellValue } from "~/utils/cell-cache";
+import {
+  replaceCachedCell,
+  removeCachedColumn,
+  type CellValue,
+} from "~/utils/cell-cache";
+
+const COLUMN_WIDTH = 240;
+const ROW_CONTROL_WIDTH = 88;
 
 export default function TablePage() {
   const params = useParams();
@@ -30,6 +39,26 @@ export default function TablePage() {
   const { mutateAsync } = api.cell.updateCell.useMutation();
   const { mutateAsync: createRow } = api.row.createRow.useMutation();
   const { mutateAsync: deleteRow } = api.row.deleteRow.useMutation();
+  const { mutateAsync: deleteColumn } = api.column.deleteColumn.useMutation();
+  const [reordering, setReordering] = useState(false);
+  const { mutateAsync: moveColumnMutation } =
+    api.column.moveColumn.useMutation();
+  const [columnBusy, setColumnBusy] = useState(false);
+  const [columnError, setColumnError] = useState<string | null>(null);
+  const [columnDeleteTarget, setColumnDeleteTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [typeTarget, setTypeTarget] = useState<{
+    id: string;
+    name: string;
+    type: "TEXT" | "NUMBER";
+  } | null>(null);
+  const preview = api.column.previewTypeChange.useQuery(
+    { columnId: typeTarget?.id ?? "", type: typeTarget?.type ?? "TEXT" },
+    { enabled: !!typeTarget, staleTime: 0, refetchOnWindowFocus: false },
+  );
+  const { mutateAsync: changeColumnType } = api.column.changeType.useMutation();
   const rowOperation = useRef(false);
   const [rowBusy, setRowBusy] = useState(false);
   const [rowError, setRowError] = useState<string | null>(null);
@@ -122,6 +151,127 @@ export default function TablePage() {
     } finally {
       rowOperation.current = false;
       setRowBusy(false);
+    }
+  }
+
+  async function confirmColumnDeletion() {
+    if (
+      !columnDeleteTarget ||
+      rowOperation.current ||
+      pendingCells.current.size
+    )
+      return;
+    rowOperation.current = true;
+    setColumnBusy(true);
+    setColumnError(null);
+    const columnId = columnDeleteTarget.id;
+    try {
+      await Promise.all([
+        utils.table.getTableWithColumns.cancel({ tableId }),
+        utils.row.getRows.cancel({ tableId, take: 200 }),
+      ]);
+      await deleteColumn({ columnId });
+      utils.row.getRows.setInfiniteData({ tableId, take: 200 }, (data) =>
+        removeCachedColumn(data, columnId),
+      );
+      utils.table.getTableWithColumns.setData({ tableId }, (table) =>
+        table
+          ? {
+              ...table,
+              columns: table.columns.filter((column) => column.id !== columnId),
+            }
+          : table,
+      );
+      setColumnDeleteTarget(null);
+      setFocusTarget(null);
+    } catch (cause) {
+      setColumnError(
+        cause instanceof Error ? cause.message : "Could not delete column",
+      );
+    } finally {
+      rowOperation.current = false;
+      setColumnBusy(false);
+    }
+  }
+
+  async function confirmTypeChange() {
+    if (
+      !typeTarget ||
+      !preview.data?.canConvert ||
+      rowOperation.current ||
+      pendingCells.current.size
+    )
+      return;
+    rowOperation.current = true;
+    setColumnBusy(true);
+    setColumnError(null);
+    let committed = false;
+    try {
+      await Promise.all([
+        utils.table.getTableWithColumns.cancel({ tableId }),
+        utils.row.getRows.cancel({ tableId, take: 200 }),
+      ]);
+      const column = await changeColumnType({
+        columnId: typeTarget.id,
+        fromType: preview.data.fromType,
+        type: typeTarget.type,
+      });
+      committed = true;
+      utils.table.getTableWithColumns.setData({ tableId }, (table) =>
+        table
+          ? {
+              ...table,
+              columns: table.columns.map((existing) =>
+                existing.id === column.id
+                  ? { ...existing, type: column.type }
+                  : existing,
+              ),
+            }
+          : table,
+      );
+      setTypeTarget(null);
+      setFocusTarget(null);
+      parentRef.current?.scrollTo({ top: 0 });
+      await utils.row.getRows.reset({ tableId, take: 200 });
+    } catch (cause) {
+      setColumnError(
+        committed
+          ? "Type changed, but rows could not be refreshed. Reload the page."
+          : cause instanceof Error
+            ? cause.message
+            : "Could not change column type",
+      );
+    } finally {
+      rowOperation.current = false;
+      setColumnBusy(false);
+    }
+  }
+
+  async function reorderColumn(columnId: string, direction: "left" | "right") {
+    if (rowOperation.current || pendingCells.current.size) return;
+    rowOperation.current = true;
+    setColumnBusy(true);
+    setReordering(true);
+    setColumnError(null);
+    try {
+      await utils.table.getTableWithColumns.cancel({ tableId });
+      const columns = await moveColumnMutation({
+        tableId,
+        columnId,
+        direction,
+      });
+      utils.table.getTableWithColumns.setData({ tableId }, (table) =>
+        table ? { ...table, columns } : table,
+      );
+      setFocusTarget(null);
+    } catch (cause) {
+      setColumnError(
+        cause instanceof Error ? cause.message : "Could not reorder column",
+      );
+    } finally {
+      rowOperation.current = false;
+      setColumnBusy(false);
+      setReordering(false);
     }
   }
 
@@ -228,6 +378,20 @@ export default function TablePage() {
     }
     const viewport = parentRef.current;
     if (!viewport) return;
+    const columnIndex =
+      table?.columns.findIndex(
+        (column) => column.id === focusTarget.columnId,
+      ) ?? -1;
+    if (columnIndex >= 0) {
+      const left = ROW_CONTROL_WIDTH + columnIndex * COLUMN_WIDTH;
+      const right = left + COLUMN_WIDTH;
+      if (COLUMN_WIDTH > viewport.clientWidth - ROW_CONTROL_WIDTH)
+        viewport.scrollLeft = left - ROW_CONTROL_WIDTH;
+      else if (left < viewport.scrollLeft + ROW_CONTROL_WIDTH)
+        viewport.scrollLeft = left - ROW_CONTROL_WIDTH;
+      else if (right > viewport.scrollLeft + viewport.clientWidth)
+        viewport.scrollLeft = Math.max(0, right - viewport.clientWidth);
+    }
     const headerHeight = viewport.querySelector("thead")?.offsetHeight ?? 0;
     const rowTop = index * 36;
     const rowBottom = rowTop + 36;
@@ -253,7 +417,7 @@ export default function TablePage() {
       cell.focus({ preventScroll: true });
       setFocusTarget(null);
     }
-  }, [focusTarget, rowBusy, rows, virtualItems, rowVirtualizer]);
+  }, [focusTarget, rowBusy, rows, table, virtualItems, rowVirtualizer]);
 
   /* ---------------- INFINITE SCROLL ---------------- */
   useEffect(() => {
@@ -336,9 +500,9 @@ export default function TablePage() {
         <span
           aria-hidden="true"
           className={
-            pendingCount > 0 || rowBusy
+            pendingCount > 0 || rowBusy || columnBusy
               ? "h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-100 border-t-blue-600 motion-reduce:animate-none"
-              : saveError || rowError
+              : saveError || rowError || columnError
                 ? "h-2 w-2 shrink-0 rounded-full bg-red-500"
                 : "h-2 w-2 shrink-0 rounded-full bg-green-500"
           }
@@ -346,11 +510,17 @@ export default function TablePage() {
         <span>
           {pendingCount > 0
             ? `Saving ${pendingCount} cell${pendingCount === 1 ? "" : "s"}…`
-            : rowBusy
-              ? "Updating rows…"
-              : saveError || rowError
-                ? "Some changes could not be saved"
-                : "All changes saved"}
+            : columnBusy
+              ? reordering
+                ? "Reordering columns…"
+                : typeTarget
+                  ? "Changing column type…"
+                  : "Deleting column…"
+              : rowBusy
+                ? "Updating rows…"
+                : saveError || rowError || columnError
+                  ? "Some changes could not be saved"
+                  : "All changes saved"}
         </span>
       </p>
       {saveError && (
@@ -371,7 +541,7 @@ export default function TablePage() {
       <div className="mb-3 flex items-center gap-3">
         <button
           type="button"
-          disabled={rowBusy || pendingCount > 0}
+          disabled={rowBusy || columnBusy || pendingCount > 0}
           onClick={() => void manageRow("create")}
           className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50 disabled:opacity-50"
         >
@@ -379,12 +549,139 @@ export default function TablePage() {
         </button>
         <InfoTooltip label="Row management tips">
           <p>
-            New rows appear at the top. Use the trash icon beside a row number to delete it
-            after confirmation.
+            New rows appear at the top. Use the trash icon beside a row number
+            to delete it after confirmation.
           </p>
           <p>Finish pending cell saves before adding or deleting rows.</p>
         </InfoTooltip>
       </div>
+      <div className="mb-3">
+        <AddColumnForm tableId={tableId} />
+      </div>
+      {typeTarget && (
+        <section
+          aria-labelledby="type-change-title"
+          className="mb-3 rounded-lg border border-blue-200 bg-white p-4"
+        >
+          <h2 id="type-change-title" className="font-medium">
+            Change “{typeTarget.name}” to{" "}
+            {typeTarget.type === "TEXT" ? "Text" : "Numbers only"}?
+          </h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Values will be converted together. Invalid values block the change;
+            nothing is discarded. Blank values stay empty. Numeric formatting
+            such as leading zeros will be lost when converting to numbers.
+            Numbers use floating-point precision.
+          </p>
+          {preview.isFetching ? (
+            <LoadingSpinner label="Checking column values…" fullPage={false} />
+          ) : preview.error ? (
+            <p role="alert" className="mt-2 text-red-700">
+              {preview.error.message}
+            </p>
+          ) : (
+            preview.data && (
+              <div className="my-3 text-sm">
+                <p>
+                  {preview.data.total} stored cells checked.{" "}
+                  {preview.data.invalidCount} values cannot be converted.
+                </p>
+                {preview.data.samples.length > 0 && (
+                  <ul className="mt-2 list-inside list-disc text-red-700">
+                    {preview.data.samples.map((sample, index) => (
+                      <li key={index}>Invalid value: “{sample.value}”</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )
+          )}
+          <div className="mt-3 flex gap-3">
+            <button
+              type="button"
+              disabled={
+                columnBusy ||
+                rowBusy ||
+                pendingCount > 0 ||
+                preview.isFetching ||
+                !preview.data?.canConvert
+              }
+              onClick={() => void confirmTypeChange()}
+              className="rounded bg-blue-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+            >
+              {columnBusy ? "Converting…" : "Confirm change"}
+            </button>
+            <button
+              type="button"
+              disabled={columnBusy || preview.isFetching}
+              onClick={() => void preview.refetch()}
+              className="rounded border px-3 py-2 text-sm"
+            >
+              Refresh preview
+            </button>
+            <button
+              type="button"
+              disabled={columnBusy}
+              onClick={() => {
+                setTypeTarget(null);
+                setColumnError(null);
+              }}
+              className="rounded border px-3 py-2 text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+          {columnError && (
+            <p role="alert" className="mt-2 text-sm text-red-700">
+              {columnError}
+            </p>
+          )}
+        </section>
+      )}
+      {!typeTarget && !columnDeleteTarget && columnError && (
+        <p role="alert" className="mb-2 text-sm text-red-700">
+          {columnError}
+        </p>
+      )}
+      {columnDeleteTarget && (
+        <div
+          role="alertdialog"
+          aria-modal="false"
+          aria-labelledby="delete-column-title"
+          className="mb-3 rounded border border-red-200 bg-red-50 p-3"
+        >
+          <p id="delete-column-title">
+            Delete column “{columnDeleteTarget.name}” and all its values? This
+            cannot be undone.
+          </p>
+          <div className="mt-2 flex gap-3">
+            <button
+              type="button"
+              disabled={columnBusy || rowBusy || pendingCount > 0}
+              onClick={() => void confirmColumnDeletion()}
+              className="rounded bg-red-700 px-3 py-1 text-white disabled:opacity-50"
+            >
+              {columnBusy ? "Deleting…" : "Delete column"}
+            </button>
+            <button
+              type="button"
+              disabled={columnBusy}
+              onClick={() => {
+                setColumnDeleteTarget(null);
+                setColumnError(null);
+              }}
+              className="rounded border px-3 py-1"
+            >
+              Cancel
+            </button>
+          </div>
+          {columnError && (
+            <p role="alert" className="mt-2 text-sm text-red-700">
+              {columnError}
+            </p>
+          )}
+        </div>
+      )}
       {rowError && (
         <p role="alert" className="mb-2 text-sm text-red-700">
           {rowError}
@@ -404,7 +701,7 @@ export default function TablePage() {
           <div className="mt-2 flex gap-3">
             <button
               type="button"
-              disabled={rowBusy || pendingCount > 0}
+              disabled={rowBusy || columnBusy || pendingCount > 0}
               onClick={() => void manageRow("delete", deleteTarget.id)}
               className="rounded bg-red-700 px-3 py-1 text-white disabled:opacity-50"
             >
@@ -412,7 +709,7 @@ export default function TablePage() {
             </button>
             <button
               type="button"
-              disabled={rowBusy}
+              disabled={rowBusy || columnBusy}
               onClick={() => {
                 setDeleteTarget(null);
                 setRowError(null);
@@ -438,35 +735,48 @@ export default function TablePage() {
         }}
         className="relative h-[80vh] overflow-auto border border-gray-300"
       >
-        <table className="w-full table-fixed border-collapse border border-gray-300">
-          <thead className="sticky top-0 z-10 bg-white">
+        <table
+          className="table-fixed border-collapse border border-gray-300"
+          style={{
+            width: ROW_CONTROL_WIDTH + table.columns.length * COLUMN_WIDTH,
+          }}
+        >
+          <thead className="sticky top-0 z-30 bg-white">
             <tr>
               <th
                 scope="col"
-                className="border border-gray-300 px-2 py-1 text-left"
-                style={{ width: 88 }}
+                className="sticky left-0 z-40 border border-gray-300 bg-slate-50 px-2 py-1 text-left"
+                style={{ width: ROW_CONTROL_WIDTH }}
               >
                 Row
               </th>
-              {table.columns.map((col) => (
-                <th
+              {table.columns.map((col, columnIndex) => (
+                <ColumnHeader
                   key={col.id}
-                  scope="col"
-                  title={
-                    col.type === "TEXT"
-                      ? "Accepts text, numbers, and symbols"
-                      : "Accepts numbers only"
-                  }
-                  className="border border-gray-300 px-2 py-1 text-left"
-                  style={{
-                    width: `calc((100% - 88px) / ${table.columns.length})`,
+                  columnId={col.id}
+                  canMoveLeft={columnIndex > 0}
+                  canMoveRight={columnIndex < table.columns.length - 1}
+                  onMove={(direction) => void reorderColumn(col.id, direction)}
+                  deleteDisabled={rowBusy || columnBusy || pendingCount > 0}
+                  onChangeType={() => {
+                    setTypeTarget({
+                      id: col.id,
+                      name: col.name,
+                      type: col.type === "TEXT" ? "NUMBER" : "TEXT",
+                    });
+                    setColumnDeleteTarget(null);
+                    setColumnError(null);
                   }}
-                >
-                  <span>{col.name}</span>
-                  <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-normal text-gray-600">
-                    {col.type === "TEXT" ? "Text" : "Numbers only"}
-                  </span>
-                </th>
+                  onDelete={() => {
+                    setTypeTarget(null);
+                    setColumnDeleteTarget({ id: col.id, name: col.name });
+                    setColumnError(null);
+                  }}
+                  tableId={tableId}
+                  name={col.name}
+                  type={col.type}
+                  width={`${COLUMN_WIDTH}px`}
+                />
               ))}
             </tr>
           </thead>
@@ -496,15 +806,15 @@ export default function TablePage() {
                   }}
                 >
                   <td
-                    className="flex h-full shrink-0 items-center justify-between border border-gray-300 bg-gray-50 px-2 text-xs text-gray-600"
-                    style={{ width: 88 }}
+                    className="sticky left-0 z-20 flex h-full shrink-0 items-center justify-between border border-gray-300 bg-gray-50 px-2 text-xs text-gray-600"
+                    style={{ width: ROW_CONTROL_WIDTH }}
                   >
                     <span>{virtualRow.index + 1}</span>
                     <button
                       type="button"
                       aria-label={`Delete row ${virtualRow.index + 1}`}
                       title="Delete row"
-                      disabled={rowBusy || pendingCount > 0}
+                      disabled={rowBusy || columnBusy || pendingCount > 0}
                       onClick={() => {
                         setDeleteTarget({
                           id: row.id,
@@ -544,8 +854,8 @@ export default function TablePage() {
                             ? (cell?.textValue ?? null)
                             : (cell?.numberValue ?? null)
                         }
-                        width={`calc((100% - 88px) / ${table.columns.length})`}
-                        disabled={rowBusy}
+                        width={`${COLUMN_WIDTH}px`}
+                        disabled={rowBusy || columnBusy}
                         onSave={saveCell}
                         onNavigate={navigateCell}
                       />

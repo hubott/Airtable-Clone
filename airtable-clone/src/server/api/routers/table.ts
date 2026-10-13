@@ -10,7 +10,7 @@ export const tableRouter = createTRPCRouter({
       const table = await ctx.db.table.findFirst({
         where: { id: input.tableId, base: { ownerId: ctx.session.user.id } },
         include: {
-          columns: { orderBy: { order: "asc" } },
+          columns: { orderBy: [{ order: "asc" }, { id: "asc" }] },
         },
       });
 
