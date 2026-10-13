@@ -46,7 +46,7 @@ npm run db:migrate
 
 The script creates a PostgreSQL container using the database name, password and port from `DATABASE_URL`. A Homebrew PostgreSQL installation is another option; create the matching database/user before running migrations.
 
-A fresh database has no bases or tables. Sign in first to create your user, then create owned sample data using Prisma Studio (`npm run db:studio`) or a deliberate development-only fixture. The current UI cannot create tables yet. The existing seed script requires an existing table and adds 100,000 rows; it is not a fresh-database bootstrap and should not be run automatically.
+A fresh database has no bases or tables. Sign in first to create your user, then create owned sample data using Prisma Studio (`npm run db:studio`) or a deliberate development-only fixture. The current UI can add rows to existing tables but cannot create tables yet. The existing seed script requires an existing table and adds 100,000 rows; it is not a fresh-database bootstrap and should not be run automatically.
 
 ## Start and use
 
@@ -64,6 +64,14 @@ Cell controls:
 - Moving focus away (including Tab) cancels an unsaved draft.
 - Empty text or whitespace-only numeric input clears the cell. Invalid numbers stay in the editor with an error.
 - Saving is optimistic. Failed writes restore that cell's previous value and show an error above the grid; edit again to retry.
+
+Row controls:
+
+- **+ Add row** inserts a blank row at the top and scrolls to it.
+- The **×** beside a row number opens a deletion confirmation. Confirming removes the row and all its cells; Cancel preserves it.
+- Row changes update the grid after the server confirms success. Failures keep the existing grid data and show an error.
+- Finish pending cell saves before adding or deleting rows. Cell editing is disabled briefly during row operations.
+- Pagination uses `(order, id)` boundaries, so deleting the last row of a fetched page does not break loading the next page.
 
 ## Verify
 

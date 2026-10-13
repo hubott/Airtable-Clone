@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { api } from "~/trpc/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { EditableCell } from "~/app/_components/EditableCell";
+import { prependCachedRow, removeCachedRow } from "~/utils/row-cache";
 import { parseCellValue } from "~/utils/cell-value";
 import { replaceCachedCell, type CellValue } from "~/utils/cell-cache";
 
@@ -15,6 +16,15 @@ export default function TablePage() {
 
   const utils = api.useUtils();
   const { mutateAsync } = api.cell.updateCell.useMutation();
+  const { mutateAsync: createRow } = api.row.createRow.useMutation();
+  const { mutateAsync: deleteRow } = api.row.deleteRow.useMutation();
+  const rowOperation = useRef(false);
+  const [rowBusy, setRowBusy] = useState(false);
+  const [rowError, setRowError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    number: number;
+  } | null>(null);
   const pendingCells = useRef(new Set<string>());
   const [pendingCount, setPendingCount] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -26,6 +36,8 @@ export default function TablePage() {
       type: "TEXT" | "NUMBER",
       value: string,
     ) => {
+      if (rowOperation.current)
+        throw new Error("Wait for the row operation to finish.");
       const key = JSON.stringify([rowId, columnId]);
       if (pendingCells.current.has(key))
         throw new Error("This cell is still saving. Try again shortly.");
@@ -69,6 +81,37 @@ export default function TablePage() {
     },
     [tableId, utils, mutateAsync],
   );
+
+  async function manageRow(action: "create" | "delete", rowId?: string) {
+    if (rowOperation.current || pendingCells.current.size) return;
+    rowOperation.current = true;
+    setRowBusy(true);
+    setRowError(null);
+    const query = { tableId, take: 200 };
+    try {
+      await utils.row.getRows.cancel(query);
+      if (action === "create") {
+        const row = await createRow({ tableId });
+        utils.row.getRows.setInfiniteData(query, (data) =>
+          prependCachedRow(data, row),
+        );
+        parentRef.current?.scrollTo({ top: 0 });
+      } else if (rowId) {
+        await deleteRow({ rowId });
+        utils.row.getRows.setInfiniteData(query, (data) =>
+          removeCachedRow(data, rowId),
+        );
+        setDeleteTarget(null);
+      }
+    } catch (cause) {
+      setRowError(
+        cause instanceof Error ? cause.message : "Could not update rows",
+      );
+    } finally {
+      rowOperation.current = false;
+      setRowBusy(false);
+    }
+  }
 
   /* ---------------- TABLE META ---------------- */
   const {
@@ -197,9 +240,61 @@ export default function TablePage() {
           </button>
         </div>
       )}
+      <div className="mb-3 flex items-center gap-3">
+        <button
+          type="button"
+          disabled={rowBusy || pendingCount > 0}
+          onClick={() => void manageRow("create")}
+          className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50 disabled:opacity-50"
+        >
+          {rowBusy ? "Updating rows…" : "+ Add row"}
+        </button>
+        <span className="text-sm text-gray-600">
+          New rows appear at the top.
+        </span>
+      </div>
+      {rowError && (
+        <p role="alert" className="mb-2 text-sm text-red-700">
+          {rowError}
+        </p>
+      )}
+      {deleteTarget && (
+        <div
+          role="alertdialog"
+          aria-modal="false"
+          aria-labelledby="delete-row-title"
+          className="mb-3 rounded border border-red-200 bg-red-50 p-3"
+        >
+          <p id="delete-row-title">
+            Delete row {deleteTarget.number} and all its cell values? This
+            cannot be undone.
+          </p>
+          <div className="mt-2 flex gap-3">
+            <button
+              type="button"
+              disabled={rowBusy || pendingCount > 0}
+              onClick={() => void manageRow("delete", deleteTarget.id)}
+              className="rounded bg-red-700 px-3 py-1 text-white disabled:opacity-50"
+            >
+              Delete row
+            </button>
+            <button
+              type="button"
+              disabled={rowBusy}
+              onClick={() => {
+                setDeleteTarget(null);
+                setRowError(null);
+              }}
+              className="rounded border px-3 py-1"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       {!rows.length && (
         <p className="mb-2 text-sm text-gray-600">
-          This table has no rows yet.
+          This table has no rows yet. Add a row to start entering data.
         </p>
       )}
 
@@ -210,11 +305,20 @@ export default function TablePage() {
         <table className="w-full table-fixed border-collapse border border-gray-300">
           <thead className="sticky top-0 z-10 bg-white">
             <tr>
+              <th
+                scope="col"
+                className="border border-gray-300 px-2 py-1 text-left"
+                style={{ width: 88 }}
+              >
+                Row
+              </th>
               {table.columns.map((col) => (
                 <th
                   key={col.id}
                   className="border border-gray-300 px-2 py-1 text-left"
-                  style={{ width: `${100 / table.columns.length}%` }}
+                  style={{
+                    width: `calc((100% - 88px) / ${table.columns.length})`,
+                  }}
                 >
                   {col.name}
                 </th>
@@ -245,6 +349,28 @@ export default function TablePage() {
                     alignItems: "center",
                   }}
                 >
+                  <td
+                    className="flex h-full shrink-0 items-center justify-between border border-gray-300 bg-gray-50 px-2 text-xs text-gray-600"
+                    style={{ width: 88 }}
+                  >
+                    <span>{virtualRow.index + 1}</span>
+                    <button
+                      type="button"
+                      aria-label={`Delete row ${virtualRow.index + 1}`}
+                      title="Delete row"
+                      disabled={rowBusy || pendingCount > 0}
+                      onClick={() => {
+                        setDeleteTarget({
+                          id: row.id,
+                          number: virtualRow.index + 1,
+                        });
+                        setRowError(null);
+                      }}
+                      className="rounded px-1 text-red-700 hover:bg-red-100 focus:outline-2 focus:outline-blue-500 disabled:opacity-50"
+                    >
+                      ×
+                    </button>
+                  </td>
                   {table.columns.map((col) => {
                     const cell = row.cellsByColumnId?.[col.id];
 
@@ -260,7 +386,8 @@ export default function TablePage() {
                             ? (cell?.textValue ?? null)
                             : (cell?.numberValue ?? null)
                         }
-                        width={100 / table.columns.length}
+                        width={`calc((100% - 88px) / ${table.columns.length})`}
+                        disabled={rowBusy}
                         onSave={saveCell}
                       />
                     );

@@ -5,7 +5,7 @@ import { parseCellValue } from "../src/utils/cell-value";
 
 function fixture(): NonNullable<Parameters<typeof replaceCachedCell>[0]> {
   return {
-    pageParams: [null, "row2"],
+    pageParams: [null, { id: "row2", order: 1 }],
     pages: [
       {
         formattedRows: [
@@ -24,7 +24,7 @@ function fixture(): NonNullable<Parameters<typeof replaceCachedCell>[0]> {
           },
           { id: "row2", tableId: "table", order: 1, cellsByColumnId: {} },
         ],
-        nextCursor: "row2",
+        nextCursor: { id: "row2", order: 1 },
       },
       {
         formattedRows: [

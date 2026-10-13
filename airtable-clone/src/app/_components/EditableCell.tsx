@@ -9,7 +9,8 @@ type Props = {
   columnName: string;
   type: "TEXT" | "NUMBER";
   value: string | number | null;
-  width: number;
+  width: number | string;
+  disabled?: boolean;
   onSave: (
     rowId: string,
     columnId: string,
@@ -31,6 +32,7 @@ export const EditableCell = memo(function EditableCell({
   value,
   width,
   onSave,
+  disabled = false,
 }: Props) {
   const cellRef = useRef<HTMLTableCellElement>(null);
   const savingRef = useRef(false);
@@ -40,7 +42,7 @@ export const EditableCell = memo(function EditableCell({
   const [saving, setSaving] = useState(false);
 
   function startEditing() {
-    if (savingRef.current) return;
+    if (savingRef.current || disabled) return;
     setDraft(String(value ?? ""));
     setError(null);
     setEditing(true);
@@ -53,7 +55,7 @@ export const EditableCell = memo(function EditableCell({
   }
 
   async function save() {
-    if (savingRef.current) return;
+    if (savingRef.current || disabled) return;
     try {
       parseCellValue(type, draft);
     } catch (cause) {
@@ -82,14 +84,18 @@ export const EditableCell = memo(function EditableCell({
   return (
     <td
       ref={cellRef}
-      tabIndex={0}
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled}
       aria-label={`${columnName}: ${value ?? "empty"}`}
       aria-busy={saving}
       title={
         error ?? (saving ? "Saving…" : "Double-click or press Enter to edit")
       }
       className={`relative h-full min-w-0 border border-gray-300 px-2 py-1 focus-within:z-10 focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-blue-500 ${error ? "bg-red-50" : saving ? "bg-blue-50" : "bg-white"}`}
-      style={{ width: `${width}%`, minHeight: 36 }}
+      style={{
+        width: typeof width === "number" ? `${width}%` : width,
+        minHeight: 36,
+      }}
       onClick={() => {
         if (!editing) cellRef.current?.focus();
       }}
@@ -104,6 +110,7 @@ export const EditableCell = memo(function EditableCell({
       {editing ? (
         <input
           ref={focusInput}
+          disabled={disabled}
           aria-label={`Edit ${columnName}`}
           aria-invalid={!!error}
           title={error ?? undefined}

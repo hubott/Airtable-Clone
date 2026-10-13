@@ -16,8 +16,9 @@ The application lives in `airtable-clone/` relative to this file. Run npm, Prism
 - Ownership follows User → Base (`ownerId`) → Table → Row/Column. Cell relates to both Row and Column and has the unique key `(rowId, columnId)`.
 - Columns support only TEXT and NUMBER. Cells contain nullable `textValue` and `numberValue`; reset the inactive field when saving. Empty text and blank numeric input clear the value; preserve nonempty text whitespace.
 - Routes: `/dashboard`, `/dashboard/base/[baseId]`, `/dashboard/table/[tableId]`. Shared client UI lives in `src/app/_components/`.
-- The table page fetches ordered columns with `getTableWithColumns` and cursor-paginated rows with `getRows`. Rows expose `cellsByColumnId`. Pagination orders by `(order, id)`; cursor IDs must belong to the requested table.
-- TanStack Virtual renders 36px rows. The current grid fetches 200 rows per page and overscans 12. Measure performance before changing these settings; keep stable row IDs as React and virtualizer keys.
+- The table page fetches ordered columns with `getTableWithColumns` and cursor-paginated rows with `getRows`. Rows expose `cellsByColumnId`. Pagination uses `(order, id)` value boundaries scoped to the owned table, so deleting a cursor row does not break infinite scrolling.
+- Row creation locks the owned table and allocates `first.order - 1` so new rows appear at the top, with empty cells created lazily by cell upserts. Row deletion locks the owned row and explicitly deletes its cells in the same transaction. Row controls wait for server confirmation before updating cached pages.
+- TanStack Virtual renders 36px rows. The current grid fetches 200 rows per page and overscans 12. Measure performance before changing these settings; keep stable row IDs as React and virtualizer keys. Memoize `getItemKey` and keep `useFlushSync: false` for React 19 compatibility.
 - `EditableCell.tsx` owns edit drafts and is memoized. The table page owns async saves and optimistic updates so writes and errors survive individual cells unmounting. `src/utils/cell-cache.ts` updates only the affected cell; rollback must not restore an entire stale page snapshot.
 - `src/utils/cell-value.ts` shares numeric parsing between frontend and backend. Client validation improves feedback; server validation remains mandatory.
 
@@ -52,7 +53,7 @@ From the application directory:
 ## Development priorities
 
 1. Complete editable TEXT/NUMBER cells: safe saves, validation, clearing values, optimistic updates, rollback, keyboard interaction and responsive rendering. Verify in a real authenticated browser with a development database.
-2. Row creation/deletion, stable ordering and improved keyboard navigation.
+2. Row creation/deletion and stable ordering are implemented. Next within row management: improved keyboard navigation and practical copy/paste.
 3. Column creation/rename/delete, safe type changes and reordering; additional types later.
 4. Base/table creation, rename/delete and navigation improvements.
 5. Sorting, filtering, search, resizing, range selection and copy/paste; validate large-dataset performance.

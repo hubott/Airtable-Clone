@@ -1,7 +1,10 @@
 import type { InfiniteData } from "@tanstack/react-query";
 import type { RouterOutputs } from "~/trpc/react";
 
-type Rows = InfiniteData<RouterOutputs["row"]["getRows"], string | null>;
+export type Rows = InfiniteData<
+  RouterOutputs["row"]["getRows"],
+  RouterOutputs["row"]["getRows"]["nextCursor"]
+>;
 export type CellValue = RouterOutputs["cell"]["updateCell"];
 
 // Copy only the affected page, row and cell map; preserve all other references.
