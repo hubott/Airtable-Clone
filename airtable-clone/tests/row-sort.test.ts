@@ -138,3 +138,60 @@ void test("sorted reads reject mismatched cursor context and values before SQL e
     { code: "BAD_REQUEST" },
   );
 });
+
+const filter = {
+  columnId: "column",
+  type: "NUMBER" as const,
+  operator: "gte" as const,
+  value: 0,
+};
+void test("filtered reads authorize the table and filter column even without sorting", async () => {
+  for (const [options, code] of [
+    [{ authenticated: false }, "UNAUTHORIZED"],
+    [{ owned: false }, "NOT_FOUND"],
+    [{ column: false }, "NOT_FOUND"],
+  ] as const) {
+    const { caller, events } = setup(options);
+    await assert.rejects(caller.row.getRows({ tableId: "table", filter }), {
+      code,
+    });
+    assert.equal(events.includes("sort"), false);
+  }
+  const { caller } = setup();
+  const result = await caller.row.getRows({
+    tableId: "table",
+    take: 2,
+    filter,
+  });
+  assert.deepEqual(result.nextCursor, { id: "first", order: 1, filter });
+});
+void test("filtered reads reject changed filters, stale types and invalid operators before executing SQL", async () => {
+  const attempts = [
+    { tableId: "table", filter, cursor: { id: "deleted", order: 0 } },
+    {
+      tableId: "table",
+      filter,
+      cursor: { id: "deleted", order: 0, filter: { ...filter, value: 1 } },
+    },
+    { tableId: "table", cursor: { id: "deleted", order: 0, filter } },
+  ];
+  for (const attempt of attempts) {
+    const { caller, events } = setup();
+    await assert.rejects(caller.row.getRows(attempt), { code: "BAD_REQUEST" });
+    assert.equal(events.includes("sort"), false);
+  }
+  const { caller, events } = setup();
+  await assert.rejects(
+    caller.row.getRows({
+      tableId: "table",
+      filter: {
+        columnId: "column",
+        type: "TEXT",
+        operator: "equals",
+        value: "0",
+      },
+    }),
+    { code: "CONFLICT" },
+  );
+  assert.equal(events.includes("sort"), false);
+});

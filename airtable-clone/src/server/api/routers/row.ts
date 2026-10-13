@@ -1,13 +1,14 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { rowFilterSchema } from "~/utils/row-filter";
 import type { Prisma } from "~/../generated/prisma";
 import {
-  getSortedRows,
+  getViewRows,
   rowCells,
   rowCursorSchema,
   rowSortSchema,
   type RowCursor,
-} from "../queries/sorted-rows";
+} from "../queries/view-rows";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 
 // Called inside the insertion transaction; the table lock serializes order allocation.
@@ -109,6 +110,7 @@ export const rowRouter = createTRPCRouter({
         tableId: z.string(),
         cursor: rowCursorSchema.nullish(),
         sort: rowSortSchema.optional(),
+        filter: rowFilterSchema.optional(),
         take: z.number().int().min(1).max(1000).default(50),
       }),
     )
@@ -120,25 +122,29 @@ export const rowRouter = createTRPCRouter({
       if (!table)
         throw new TRPCError({ code: "NOT_FOUND", message: "Table not found" });
 
-      if (!input.sort && input.cursor?.sort)
+      if (
+        (!input.sort && input.cursor?.sort) ||
+        (!input.filter && input.cursor?.filter)
+      )
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Sort changed. Reload rows from the beginning.",
+          message: "View changed. Reload rows from the beginning.",
         });
       const sort = input.sort;
-      const sorted = sort
-        ? await ctx.db.$transaction(
-            (tx) =>
-              getSortedRows(tx, {
-                ...input,
-                sort,
-                ownerId: ctx.session.user.id,
-              }),
-            { isolationLevel: "RepeatableRead" },
-          )
-        : null;
+      const viewPage =
+        sort || input.filter
+          ? await ctx.db.$transaction(
+              (tx) =>
+                getViewRows(tx, {
+                  ...input,
+                  sort,
+                  ownerId: ctx.session.user.id,
+                }),
+              { isolationLevel: "RepeatableRead" },
+            )
+          : null;
       const rows =
-        sorted?.rows ??
+        viewPage?.rows ??
         (await ctx.db.row.findMany({
           where: {
             tableId: input.tableId,
@@ -162,8 +168,8 @@ export const rowRouter = createTRPCRouter({
         ),
       }));
       const lastRow = formattedRows.at(-1);
-      const nextCursor: RowCursor | null = sorted
-        ? sorted.nextCursor
+      const nextCursor: RowCursor | null = viewPage
+        ? viewPage.nextCursor
         : formattedRows.length < input.take
           ? null
           : lastRow

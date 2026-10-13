@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import { test } from "node:test";
+import type { RowFilter } from "../src/utils/row-filter";
 import { PrismaClient } from "../generated/prisma/index.js";
 import {
-  getSortedRows,
+  getViewRows,
   type RowCursor,
-} from "../src/server/api/queries/sorted-rows";
+} from "../src/server/api/queries/view-rows";
 
 // Opt in with a dedicated local database. Only a uniquely named temporary schema is modified.
 const databaseUrl = process.env.SORT_TEST_DATABASE_URL;
@@ -49,7 +50,7 @@ void test(
       ) =>
         db.$transaction(
           (tx) =>
-            getSortedRows(tx, {
+            getViewRows(tx, {
               tableId: "table",
               ownerId: "owner",
               take,
@@ -68,6 +69,159 @@ void test(
         } while (cursor);
         return ids;
       };
+      const filteredPage = (
+        filter: RowFilter,
+        cursor?: RowCursor | null,
+        sort?: { columnId: string; direction: "asc" | "desc" },
+        take = 1,
+      ) =>
+        db.$transaction(
+          (tx) =>
+            getViewRows(tx, {
+              tableId: "table",
+              ownerId: "owner",
+              take,
+              filter,
+              sort,
+              cursor,
+            }),
+          { isolationLevel: "RepeatableRead" },
+        );
+      const filteredIds = async (
+        filter: RowFilter,
+        sort?: { columnId: string; direction: "asc" | "desc" },
+      ) => {
+        const ids: string[] = [];
+        let cursor: RowCursor | null | undefined;
+        do {
+          const result = await filteredPage(filter, cursor, sort);
+          ids.push(...result.rows.map((row) => row.id));
+          cursor = result.nextCursor;
+        } while (cursor);
+        return ids;
+      };
+      const textFilter = (
+        operator: "contains" | "equals" | "startsWith",
+        value: string,
+      ): RowFilter => ({ columnId: "text", type: "TEXT", operator, value });
+      const numberFilter = (
+        operator: "equals" | "gt" | "gte" | "lt" | "lte",
+        value: number,
+      ): RowFilter => ({ columnId: "number", type: "NUMBER", operator, value });
+      await t.test(
+        "text matching ignores case, supports literal wildcards and combines with both sort directions",
+        async () => {
+          assert.deepEqual(await filteredIds(textFilter("contains", "ALP")), [
+            "b",
+            "c",
+            "d",
+          ]);
+          assert.deepEqual(await filteredIds(textFilter("equals", "ALPHA")), [
+            "b",
+            "c",
+            "d",
+          ]);
+          assert.deepEqual(await filteredIds(textFilter("startsWith", "be")), [
+            "a",
+          ]);
+          assert.deepEqual(
+            await filteredIds(textFilter("contains", "missing")),
+            [],
+          );
+          assert.deepEqual(
+            await filteredIds(textFilter("contains", "a"), {
+              columnId: "number",
+              direction: "desc",
+            }),
+            ["a", "d", "c", "b"],
+          );
+          assert.deepEqual(
+            await filteredIds(textFilter("contains", "alp"), {
+              columnId: "text",
+              direction: "asc",
+            }),
+            ["b", "c", "d"],
+          );
+          assert.deepEqual(
+            await filteredIds(textFilter("contains", "alp"), {
+              columnId: "text",
+              direction: "desc",
+            }),
+            ["d", "b", "c"],
+          );
+          const literal = "50%_\\'; SELECT 1; --";
+          await db.$executeRaw`UPDATE "Cell" SET "textValue" = ${literal} WHERE "id" = 'ta'`;
+          assert.deepEqual(await filteredIds(textFilter("contains", "%_")), [
+            "a",
+          ]);
+          assert.deepEqual(await filteredIds(textFilter("equals", literal)), [
+            "a",
+          ]);
+          await db.$executeRaw`UPDATE "Cell" SET "textValue" = 'Beta' WHERE "id" = 'ta'`;
+        },
+      );
+      await t.test(
+        "numeric comparisons distinguish negative numbers, zero, strict and inclusive boundaries",
+        async () => {
+          for (const [operator, value, expected] of [
+            ["equals", 0, ["c"]],
+            ["gt", 0, ["a", "d"]],
+            ["gte", 0, ["a", "c", "d"]],
+            ["lt", 0, ["b"]],
+            ["lte", 0, ["b", "c"]],
+            ["equals", 10, ["a", "d"]],
+          ] as const)
+            assert.deepEqual(
+              await filteredIds(numberFilter(operator, value)),
+              expected,
+            );
+        },
+      );
+      await t.test(
+        "empty checks include explicit nulls and missing cells for both types",
+        async () => {
+          for (const [columnId, type] of [
+            ["text", "TEXT"],
+            ["number", "NUMBER"],
+          ] as const) {
+            assert.deepEqual(
+              await filteredIds({ columnId, type, operator: "isEmpty" }),
+              ["e", "f"],
+            );
+            assert.deepEqual(
+              await filteredIds({ columnId, type, operator: "isNotEmpty" }),
+              ["a", "b", "c", "d"],
+            );
+          }
+        },
+      );
+      await t.test(
+        "filter columns require ownership and current types; changed filter cursors are rejected",
+        async () => {
+          await assert.rejects(
+            filteredPage({
+              columnId: "other",
+              type: "TEXT",
+              operator: "isEmpty",
+            }),
+            { code: "NOT_FOUND" },
+          );
+          await assert.rejects(
+            filteredPage({
+              columnId: "number",
+              type: "TEXT",
+              operator: "equals",
+              value: "0",
+            }),
+            { code: "CONFLICT" },
+          );
+          const first = await filteredPage(numberFilter("gte", 0));
+          await assert.rejects(
+            filteredPage(numberFilter("gte", 10), first.nextCursor),
+            { code: "BAD_REQUEST" },
+          );
+        },
+      );
       await t.test(
         "all pages include ties, zero, negatives, absent cells and explicit blanks exactly once",
         async () => {
@@ -111,7 +265,7 @@ void test(
           await assert.rejects(page("other", "asc"), { code: "NOT_FOUND" });
           await assert.rejects(
             db.$transaction((tx) =>
-              getSortedRows(tx, {
+              getViewRows(tx, {
                 tableId: "table",
                 ownerId: "other-owner",
                 take: 2,
@@ -126,8 +280,20 @@ void test(
         "deleted cursor rows still advance at the recorded value boundary",
         async () => {
           const first = await page("text", "asc", null, 1);
+          const firstFiltered = await filteredPage(
+            textFilter("contains", "alp"),
+          );
           await db.$executeRaw`DELETE FROM "Cell" WHERE "rowId" = 'b'`;
           await db.$executeRaw`DELETE FROM "Row" WHERE "id" = 'b'`;
+          assert.equal(
+            (
+              await filteredPage(
+                textFilter("contains", "alp"),
+                firstFiltered.nextCursor,
+              )
+            ).rows[0]?.id,
+            "c",
+          );
           assert.deepEqual(
             (await page("text", "asc", first.nextCursor)).rows.map(
               (row) => row.id,
@@ -183,6 +349,31 @@ void test(
           const middle = performance.now();
           const next = await page("number", "asc", first.nextCursor, 200);
           const end = performance.now();
+          const filteredStart = performance.now();
+          const firstFiltered = await filteredPage(
+            numberFilter("gte", 500),
+            undefined,
+            { columnId: "number", direction: "asc" },
+            200,
+          );
+          const nextFiltered = await filteredPage(
+            numberFilter("gte", 500),
+            firstFiltered.nextCursor,
+            { columnId: "number", direction: "asc" },
+            200,
+          );
+          assert.equal(firstFiltered.rows.length, 200);
+          assert.equal(
+            new Set(
+              [...firstFiltered.rows, ...nextFiltered.rows].map(
+                (row) => row.id,
+              ),
+            ).size,
+            400,
+          );
+          t.diagnostic(
+            `100k rows: two filtered/sorted pages ${(performance.now() - filteredStart).toFixed(1)}ms total`,
+          );
           assert.equal(first.rows.length, 200);
           assert.equal(next.rows.length, 200);
           assert.equal(

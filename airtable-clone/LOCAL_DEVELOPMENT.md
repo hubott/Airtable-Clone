@@ -121,6 +121,16 @@ SORT_TEST_DATABASE_URL='postgresql://USER:PASSWORD@localhost:5432/LOCAL_TEST_DB'
   node --import tsx --test tests/row-sort-postgres.test.ts
 ```
 
+## Row filtering
+
+Choose a column in **Filter by**, select a condition, enter a value when needed, and choose **Apply filter**. One filter is active at a time. Text supports **contains**, **equals** and **starts with**, ignoring case and matching `%`, `_` and backslashes literally. Whitespace in text comparisons is preserved. Numbers support `=`, `>`, `≥`, `<` and `≤`; decimal/scientific notation and zero are accepted, while invalid, blank or nonfinite comparison values are rejected. Both types support **is empty** and **is not empty**; empty includes absent cells and null values.
+
+Filters apply to the entire table and work with either sort direction or default row order. Draft changes take effect only on Apply. **Clear filter** shows all rows again while keeping the current sort. Filter selections are local to this view and reset on reload. No-match feedback is distinct from an empty table. Creating rows while filtered refreshes the view; the new blank rows may be hidden. Editing the filtered column refreshes after pending saves settle, so rows that stop matching disappear. Failed saves retain the previous values. Deleting or converting the filtered column clears its filter; deleting a sorted column also clears sorting.
+
+Manually verify Text and Number conditions, missing/cleared cells, no matches, clear/reapply, and filtering alongside sorting through multiple pages. Edit values so rows stop matching; add/delete rows and convert/delete the filtered column. Verify failed saves and Arrow/Tab navigation with a development database. Changes in another browser can move rows across page boundaries; reload to see the latest view.
+
+The optional PostgreSQL test command above also verifies filtering, stale cursor contexts, literal comparisons, deleted cursor rows and filtered/sorted timing on 100,000 synthetic rows. It uses the same dedicated local test database and temporary schema.
+
 ## Verify
 
 ```sh

@@ -12,6 +12,7 @@ An Airtable-style application for organizing projects in editable spreadsheet ta
 - Column creation, renaming, deletion and safe Text/Number conversions with previews, and column reordering.
 - Bulk creation of 1–1,000 rows per request and confirmed deletion with transactional cell cleanup.
 - Horizontal scrolling with readable column widths and pinned row controls.
+- Server-side single-column Text/Number filtering with text matching, numeric comparisons and empty checks, combined with sorting.
 - Server-side single-column Text/Number sorting in either direction, with blanks last and stable pagination.
 - Virtualized rows and cursor pagination that survives row deletion.
 - Arrow/Tab keyboard navigation and single-cell copy/paste.
@@ -35,6 +36,6 @@ npm run check
 npm test
 ```
 
-ESLint checks maintained code with zero warnings allowed. Most backend tests use mocked database access. Optional PostgreSQL sorting tests exercise real ordering, pagination and a 100,000-row synthetic dataset; see the local development guide. Real Google sign-in and editing flows need authenticated browser verification.
+ESLint checks maintained code with zero warnings allowed. Most backend tests use mocked database access. Optional PostgreSQL view tests exercise real sorting, filtering, pagination and a 100,000-row synthetic dataset; see the local development guide. Real Google sign-in and editing flows need authenticated browser verification.
 
-Project architecture, coding conventions and development priorities are in [AGENTS.md](../AGENTS.md). Core base/table management is complete. Phase 5 has started with single-column sorting. Next planned work: filtering and search.
+Project architecture, coding conventions and development priorities are in [AGENTS.md](../AGENTS.md). Core base/table management is complete. Phase 5 includes single-column sorting and filtering. Next planned work: search.
