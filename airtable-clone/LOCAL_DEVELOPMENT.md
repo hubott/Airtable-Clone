@@ -78,6 +78,8 @@ Row controls:
 - Finish pending cell saves before adding or deleting rows. Cell editing is disabled briefly during row operations.
 - Pagination uses `(order, id)` boundaries, so deleting the last row of a fetched page does not break loading the next page.
 
+The grid supports horizontal scrolling with 240px-wide columns, keeping the row-number/delete gutter pinned. Arrow/Tab navigation scrolls the selected column into view. Rows remain virtualized for vertical scrolling.
+
 Column controls:
 
 - **+ Add column** opens a form for a name (1–100 characters) and Text/Numbers only input type.

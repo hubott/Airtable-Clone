@@ -22,6 +22,9 @@ import {
   type CellValue,
 } from "~/utils/cell-cache";
 
+const COLUMN_WIDTH = 240;
+const ROW_CONTROL_WIDTH = 88;
+
 export default function TablePage() {
   const params = useParams();
   const tableId = params.tableId as string;
@@ -375,6 +378,20 @@ export default function TablePage() {
     }
     const viewport = parentRef.current;
     if (!viewport) return;
+    const columnIndex =
+      table?.columns.findIndex(
+        (column) => column.id === focusTarget.columnId,
+      ) ?? -1;
+    if (columnIndex >= 0) {
+      const left = ROW_CONTROL_WIDTH + columnIndex * COLUMN_WIDTH;
+      const right = left + COLUMN_WIDTH;
+      if (COLUMN_WIDTH > viewport.clientWidth - ROW_CONTROL_WIDTH)
+        viewport.scrollLeft = left - ROW_CONTROL_WIDTH;
+      else if (left < viewport.scrollLeft + ROW_CONTROL_WIDTH)
+        viewport.scrollLeft = left - ROW_CONTROL_WIDTH;
+      else if (right > viewport.scrollLeft + viewport.clientWidth)
+        viewport.scrollLeft = Math.max(0, right - viewport.clientWidth);
+    }
     const headerHeight = viewport.querySelector("thead")?.offsetHeight ?? 0;
     const rowTop = index * 36;
     const rowBottom = rowTop + 36;
@@ -400,7 +417,7 @@ export default function TablePage() {
       cell.focus({ preventScroll: true });
       setFocusTarget(null);
     }
-  }, [focusTarget, rowBusy, rows, virtualItems, rowVirtualizer]);
+  }, [focusTarget, rowBusy, rows, table, virtualItems, rowVirtualizer]);
 
   /* ---------------- INFINITE SCROLL ---------------- */
   useEffect(() => {
@@ -718,13 +735,18 @@ export default function TablePage() {
         }}
         className="relative h-[80vh] overflow-auto border border-gray-300"
       >
-        <table className="w-full table-fixed border-collapse border border-gray-300">
-          <thead className="sticky top-0 z-10 bg-white">
+        <table
+          className="table-fixed border-collapse border border-gray-300"
+          style={{
+            width: ROW_CONTROL_WIDTH + table.columns.length * COLUMN_WIDTH,
+          }}
+        >
+          <thead className="sticky top-0 z-30 bg-white">
             <tr>
               <th
                 scope="col"
-                className="border border-gray-300 px-2 py-1 text-left"
-                style={{ width: 88 }}
+                className="sticky left-0 z-40 border border-gray-300 bg-slate-50 px-2 py-1 text-left"
+                style={{ width: ROW_CONTROL_WIDTH }}
               >
                 Row
               </th>
@@ -753,7 +775,7 @@ export default function TablePage() {
                   tableId={tableId}
                   name={col.name}
                   type={col.type}
-                  width={`calc((100% - 88px) / ${table.columns.length})`}
+                  width={`${COLUMN_WIDTH}px`}
                 />
               ))}
             </tr>
@@ -784,8 +806,8 @@ export default function TablePage() {
                   }}
                 >
                   <td
-                    className="flex h-full shrink-0 items-center justify-between border border-gray-300 bg-gray-50 px-2 text-xs text-gray-600"
-                    style={{ width: 88 }}
+                    className="sticky left-0 z-20 flex h-full shrink-0 items-center justify-between border border-gray-300 bg-gray-50 px-2 text-xs text-gray-600"
+                    style={{ width: ROW_CONTROL_WIDTH }}
                   >
                     <span>{virtualRow.index + 1}</span>
                     <button
@@ -832,7 +854,7 @@ export default function TablePage() {
                             ? (cell?.textValue ?? null)
                             : (cell?.numberValue ?? null)
                         }
-                        width={`calc((100% - 88px) / ${table.columns.length})`}
+                        width={`${COLUMN_WIDTH}px`}
                         disabled={rowBusy || columnBusy}
                         onSave={saveCell}
                         onNavigate={navigateCell}
