@@ -1,0 +1,11 @@
+
+{
+  "eslint.workingDirectories": [
+    "./airtable-clone"
+  ],
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "editor.formatOnSave": true
+}
+

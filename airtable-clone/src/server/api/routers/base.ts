@@ -4,7 +4,7 @@ import { createTRPCRouter, protectedProcedure } from "../trpc";
 
 export const baseRouter = createTRPCRouter({
   getUserBases: protectedProcedure.query(async ({ ctx }) => {
-    const userId = ctx.session.user.id;
+
     const bases = await ctx.db.base.findMany({
       where: { user: { id: ctx.session.user.id} },
       select: { id: true, name: true, createdAt: true },
