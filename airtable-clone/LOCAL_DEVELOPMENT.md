@@ -106,6 +106,21 @@ Column controls:
 - Use the **← / →** buttons in column headers to move columns one position left/right. Boundary moves are disabled. Names, types and values move together; failures preserve the current order and show an error. Keyboard navigation follows the new column order.
 - No schema migration is required for column creation or renaming.
 
+## Row sorting
+
+Choose a column in **Sort by**, then **Ascending** or **Descending**. **Default order** restores the original row order. Sorting applies to the entire table, including rows that have not been loaded. Text uses case-sensitive PostgreSQL C collation (uppercase precedes lowercase); numbers sort numerically. Missing cells and cleared values appear last in both directions. Equal values retain their default `(order, id)` order.
+
+The selection is local to the current view and resets on reload. Changing sorting, adding rows while sorted, or saving a value in the sorted column refreshes from the top. Deleting the sorted column returns to default order; converting its type refreshes sorting using the new type. Sorting never rewrites stored row order. Concurrent changes in another browser can move rows across page boundaries; refresh the view to see the current ordering.
+
+Verify with a development database: sort text and numbers both ways, clear some cells, scroll through multiple pages, edit the sorted column, add/delete rows, convert/delete the sorted column, and return to default order. Confirm failed cell saves restore their values. Confirm controls wait for pending saves, and Arrow/Tab navigation still works after loading another page.
+
+Optional database tests run only when `SORT_TEST_DATABASE_URL` is explicitly supplied. Use a dedicated **local** PostgreSQL database with permission to create schemas. They create and remove a uniquely named temporary schema; they do not use the application's `DATABASE_URL`. The tests check real PostgreSQL ordering, pagination after cursor deletion, ownership, changed column types and timings with 100,000 synthetic rows.
+
+```sh
+SORT_TEST_DATABASE_URL='postgresql://USER:PASSWORD@localhost:5432/LOCAL_TEST_DB' \
+  node --import tsx --test tests/row-sort-postgres.test.ts
+```
+
 ## Verify
 
 ```sh

@@ -9,7 +9,8 @@ import InfoTooltip from "~/app/_components/InfoTooltip";
 import DeleteResourceButton from "~/app/_components/DeleteResourceButton";
 import ResourceNameEditor from "~/app/_components/ResourceNameEditor";
 import LoadingSpinner from "~/app/_components/LoadingSpinner";
-import { api } from "~/trpc/react";
+import RowSortControls from "~/app/_components/RowSortControls";
+import { api, type RouterInputs } from "~/trpc/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   getCellDestination,
@@ -31,6 +32,17 @@ export default function TablePage() {
   const [tableDeleting, setTableDeleting] = useState(false);
   const params = useParams();
   const tableId = params.tableId as string;
+  const [sortSelection, setSortSelection] = useState<{
+    tableId: string;
+    sort: RouterInputs["row"]["getRows"]["sort"];
+  }>();
+  const sort =
+    sortSelection?.tableId === tableId ? sortSelection.sort : undefined;
+  const rowQuery = useMemo(
+    () => ({ tableId, take: 200, ...(sort ? { sort } : {}) }),
+    [tableId, sort],
+  );
+  const sortedRefreshNeeded = useRef(false);
   const [focusTarget, setFocusTarget] = useState<{
     rowId: string;
     columnId: string;
@@ -89,7 +101,7 @@ export default function TablePage() {
       const values = parseCellValue(type, value);
       pendingCells.current.add(key);
       setPendingCount(pendingCells.current.size);
-      const query = { tableId, take: 200 };
+      const query = rowQuery;
       let previous: CellValue | undefined;
       let updated = false;
       try {
@@ -110,6 +122,12 @@ export default function TablePage() {
         utils.row.getRows.setInfiniteData(query, (data) =>
           replaceCachedCell(data, rowId, columnId, saved),
         );
+        // Defer reordering until every optimistic save has settled.
+        if (sort?.columnId === columnId) sortedRefreshNeeded.current = true;
+        await utils.row.getRows.invalidate(
+          { tableId: rowQuery.tableId },
+          { refetchType: "none" },
+        );
       } catch (cause) {
         if (updated)
           utils.row.getRows.setInfiniteData(query, (data) =>
@@ -122,10 +140,58 @@ export default function TablePage() {
       } finally {
         pendingCells.current.delete(key);
         setPendingCount(pendingCells.current.size);
+        if (!pendingCells.current.size && sortedRefreshNeeded.current) {
+          sortedRefreshNeeded.current = false;
+          rowOperation.current = true;
+          setRowBusy(true);
+          navigationRequest.current++;
+          setFocusTarget(null);
+          parentRef.current?.scrollTo({ top: 0 });
+          try {
+            await utils.row.getRows.reset(query, { throwOnError: true });
+          } catch {
+            setRowError(
+              "Cell saved, but sorted rows could not be refreshed. Reload the page.",
+            );
+          } finally {
+            rowOperation.current = false;
+            setRowBusy(false);
+          }
+        }
       }
     },
-    [tableId, utils, mutateAsync],
+    [rowQuery, sort, utils, mutateAsync],
   );
+
+  async function changeSort(nextSort: RouterInputs["row"]["getRows"]["sort"]) {
+    if (rowOperation.current || pendingCells.current.size) return;
+    rowOperation.current = true;
+    setRowBusy(true);
+    navigationRequest.current++;
+    setFocusTarget(null);
+    setDeleteTarget(null);
+    setRowError(null);
+    parentRef.current?.scrollTo({ top: 0 });
+    try {
+      await utils.row.getRows.cancel(rowQuery);
+      await utils.row.getRows.reset(
+        {
+          tableId,
+          take: 200,
+          ...(nextSort ? { sort: nextSort } : {}),
+        },
+        { throwOnError: true },
+      );
+      setSortSelection({ tableId, sort: nextSort });
+    } catch (cause) {
+      setRowError(
+        cause instanceof Error ? cause.message : "Could not change sorting",
+      );
+    } finally {
+      rowOperation.current = false;
+      setRowBusy(false);
+    }
+  }
 
   async function manageRow(action: "create" | "delete", rowId?: string) {
     if (rowOperation.current || pendingCells.current.size) return;
@@ -140,14 +206,18 @@ export default function TablePage() {
     rowOperation.current = true;
     setRowBusy(true);
     setRowError(null);
-    const query = { tableId, take: 200 };
+    const query = rowQuery;
+    let committed = false;
     try {
       await utils.row.getRows.cancel(query);
       if (action === "create") {
         const createdRows = await createRows({ tableId, count });
-        utils.row.getRows.setInfiniteData(query, (data) =>
-          prependCachedRows(data, createdRows),
-        );
+        committed = true;
+        if (sort) await utils.row.getRows.reset(query, { throwOnError: true });
+        else
+          utils.row.getRows.setInfiniteData(query, (data) =>
+            prependCachedRows(data, createdRows),
+          );
         parentRef.current?.scrollTo({ top: 0 });
       } else if (rowId) {
         await deleteRow({ rowId });
@@ -156,9 +226,14 @@ export default function TablePage() {
         );
         setDeleteTarget(null);
       }
+      await utils.row.getRows.invalidate({ tableId }, { refetchType: "none" });
     } catch (cause) {
       setRowError(
-        cause instanceof Error ? cause.message : "Could not update rows",
+        committed
+          ? "Rows added, but the sorted view could not be refreshed. Retry loading rows or reload the page."
+          : cause instanceof Error
+            ? cause.message
+            : "Could not update rows",
       );
     } finally {
       rowOperation.current = false;
@@ -180,10 +255,10 @@ export default function TablePage() {
     try {
       await Promise.all([
         utils.table.getTableWithColumns.cancel({ tableId }),
-        utils.row.getRows.cancel({ tableId, take: 200 }),
+        utils.row.getRows.cancel(rowQuery),
       ]);
       await deleteColumn({ columnId });
-      utils.row.getRows.setInfiniteData({ tableId, take: 200 }, (data) =>
+      utils.row.getRows.setInfiniteData(rowQuery, (data) =>
         removeCachedColumn(data, columnId),
       );
       utils.table.getTableWithColumns.setData({ tableId }, (table) =>
@@ -194,6 +269,17 @@ export default function TablePage() {
             }
           : table,
       );
+      setColumnDeleteTarget(null);
+      if (sort?.columnId === columnId) {
+        setSortSelection({ tableId, sort: undefined });
+        await utils.row.getRows.reset(
+          { tableId, take: 200 },
+          { throwOnError: true },
+        );
+        navigationRequest.current++;
+        parentRef.current?.scrollTo({ top: 0 });
+      }
+      await utils.row.getRows.invalidate({ tableId }, { refetchType: "none" });
       setColumnDeleteTarget(null);
       setFocusTarget(null);
     } catch (cause) {
@@ -221,7 +307,7 @@ export default function TablePage() {
     try {
       await Promise.all([
         utils.table.getTableWithColumns.cancel({ tableId }),
-        utils.row.getRows.cancel({ tableId, take: 200 }),
+        utils.row.getRows.cancel(rowQuery),
       ]);
       const column = await changeColumnType({
         columnId: typeTarget.id,
@@ -244,7 +330,8 @@ export default function TablePage() {
       setTypeTarget(null);
       setFocusTarget(null);
       parentRef.current?.scrollTo({ top: 0 });
-      await utils.row.getRows.reset({ tableId, take: 200 });
+      await utils.row.getRows.invalidate({ tableId }, { refetchType: "none" });
+      await utils.row.getRows.reset(rowQuery, { throwOnError: true });
     } catch (cause) {
       setColumnError(
         committed
@@ -305,15 +392,13 @@ export default function TablePage() {
     isFetchingNextPage,
     error: rowsError,
     isLoading: rowsLoading,
-  } = api.row.getRows.useInfiniteQuery(
-    { tableId, take: 200 },
-    {
-      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-      enabled: !!tableId,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-    },
-  );
+    isFetching: rowsFetching,
+  } = api.row.getRows.useInfiniteQuery(rowQuery, {
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: !!tableId,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
 
   /* ---------------- FLATTEN ROWS ---------------- */
   const rows = useMemo(
@@ -342,7 +427,8 @@ export default function TablePage() {
   const virtualItems = rowVirtualizer.getVirtualItems();
   const navigateCell = useCallback(
     (rowId: string, columnId: string, direction: CellDirection) => {
-      if (rowOperation.current || !table) return false;
+      if (rowOperation.current || !table || (sort && pendingCells.current.size))
+        return false;
       const destination = getCellDestination(
         rows.findIndex((row) => row.id === rowId),
         table.columns.findIndex((column) => column.id === columnId),
@@ -378,7 +464,7 @@ export default function TablePage() {
       }
       return true;
     },
-    [rows, table, hasNextPage, fetchNextPage],
+    [rows, table, sort, hasNextPage, fetchNextPage],
   );
 
   useEffect(() => {
@@ -434,6 +520,8 @@ export default function TablePage() {
   /* ---------------- INFINITE SCROLL ---------------- */
   useEffect(() => {
     const checkLoadMore = async () => {
+      if (rowOperation.current || pendingCells.current.size || rowsError)
+        return;
       const virtualItems = rowVirtualizer.getVirtualItems();
       const lastItem = virtualItems.at(-1);
       if (!lastItem) return;
@@ -459,6 +547,10 @@ export default function TablePage() {
     return () => el?.removeEventListener("scroll", onScroll);
   }, [
     rows.length,
+    rowsError,
+    pendingCount,
+    rowBusy,
+    columnBusy,
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
@@ -471,8 +563,7 @@ export default function TablePage() {
   }, [rows.length, rowVirtualizer]);
 
   /* ---------------- LOADING STATES ---------------- */
-  if (tableError || rowsError)
-    return <div role="alert">{tableError?.message ?? rowsError?.message}</div>;
+  if (tableError) return <div role="alert">{tableError.message}</div>;
   if (tableLoading || rowsLoading)
     return <LoadingSpinner label="Loading your table…" />;
   if (!table) return <div>Table not found</div>;
@@ -605,12 +696,19 @@ export default function TablePage() {
         </label>
         <InfoTooltip label="Row management tips">
           <p>
-            New rows appear at the top. Use the trash icon beside a row number
-            to delete it after confirmation.
+            New rows follow the selected sort, or appear at the top in default
+            order. Use the trash icon beside a row number to delete it after
+            confirmation.
           </p>
           <p>Finish pending cell saves before adding or deleting rows.</p>
         </InfoTooltip>
       </form>
+      <RowSortControls
+        columns={table.columns}
+        sort={sort}
+        disabled={rowBusy || columnBusy || tableDeleting || pendingCount > 0}
+        onChange={(nextSort) => void changeSort(nextSort)}
+      />
       <div className="mb-3">
         <AddColumnForm tableId={tableId} />
       </div>
@@ -738,6 +836,28 @@ export default function TablePage() {
           )}
         </div>
       )}
+      {rowsError && (
+        <div
+          role="alert"
+          className="mb-2 flex items-center gap-3 text-sm text-red-700"
+        >
+          <span>Could not load rows: {rowsError.message}</span>
+          <button
+            type="button"
+            disabled={
+              rowBusy ||
+              columnBusy ||
+              tableDeleting ||
+              pendingCount > 0 ||
+              rowsFetching
+            }
+            onClick={() => void changeSort(sort)}
+            className="underline disabled:opacity-50"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {rowError && (
         <p role="alert" className="mb-2 text-sm text-red-700">
           {rowError}
@@ -779,7 +899,7 @@ export default function TablePage() {
           </div>
         </div>
       )}
-      {!rows.length && (
+      {!rows.length && !rowsError && (
         <p className="mb-2 text-sm text-gray-600">
           This table has no rows yet. Add a row to start entering data.
         </p>
