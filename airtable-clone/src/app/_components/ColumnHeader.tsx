@@ -16,6 +16,9 @@ export default function ColumnHeader({
   width,
   onDelete,
   onChangeType,
+  onMove,
+  canMoveLeft,
+  canMoveRight,
   deleteDisabled = false,
 }: {
   columnId: string;
@@ -25,6 +28,9 @@ export default function ColumnHeader({
   width: string;
   onDelete: () => void;
   onChangeType: () => void;
+  onMove: (direction: "left" | "right") => void;
+  canMoveLeft: boolean;
+  canMoveRight: boolean;
   deleteDisabled?: boolean;
 }) {
   const utils = api.useUtils();
@@ -42,7 +48,9 @@ export default function ColumnHeader({
           ? {
               ...table,
               columns: table.columns.map((existing) =>
-                existing.id === column.id ? column : existing,
+                existing.id === column.id
+                  ? { ...existing, name: column.name }
+                  : existing,
               ),
             }
           : table,
@@ -165,6 +173,27 @@ export default function ColumnHeader({
       >
         {type === "TEXT" ? "Text" : "Numbers only"}
       </button>
+      {!editing && (
+        <span className="ml-2 inline-flex gap-1">
+          {(["left", "right"] as const).map((direction) => (
+            <button
+              key={direction}
+              type="button"
+              aria-label={`Move column ${name} ${direction}`}
+              title={`Move ${direction}`}
+              disabled={
+                deleteDisabled ||
+                mutation.isPending ||
+                (direction === "left" ? !canMoveLeft : !canMoveRight)
+              }
+              onClick={() => onMove(direction)}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-30"
+            >
+              <span aria-hidden="true">{direction === "left" ? "←" : "→"}</span>
+            </button>
+          ))}
+        </span>
+      )}
       {!editing && (
         <button
           type="button"

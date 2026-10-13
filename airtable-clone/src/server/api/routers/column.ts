@@ -1,3 +1,4 @@
+import { moveColumn } from "~/utils/column-order";
 import { scanColumnConversion } from "../column-conversion";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -10,6 +11,50 @@ const columnName = z
   .max(100, "Use at most 100 characters");
 
 export const columnRouter = createTRPCRouter({
+  moveColumn: protectedProcedure
+    .input(
+      z.object({
+        tableId: z.string().min(1),
+        columnId: z.string().min(1),
+        direction: z.enum(["left", "right"]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) =>
+      ctx.db.$transaction(async (tx) => {
+        const tables = await tx.$queryRaw<{ id: string }[]>`
+        SELECT t."id" FROM "Table" t JOIN "Base" b ON b."id"=t."baseId"
+        WHERE t."id"=${input.tableId} AND b."ownerId"=${ctx.session.user.id}
+        FOR UPDATE OF t
+      `;
+        if (!tables.length)
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Table not found",
+          });
+        await tx.$queryRaw`SELECT "id" FROM "Column" WHERE "tableId"=${input.tableId} ORDER BY "id" FOR UPDATE`;
+        const columns = await tx.column.findMany({
+          where: { tableId: input.tableId },
+          orderBy: [{ order: "asc" }, { id: "asc" }],
+        });
+        if (!columns.some((column) => column.id === input.columnId))
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Column not found",
+          });
+        const reordered = moveColumn(columns, input.columnId, input.direction);
+        for (const column of reordered) {
+          if (
+            columns.find((existing) => existing.id === column.id)?.order !==
+            column.order
+          )
+            await tx.column.update({
+              where: { id: column.id },
+              data: { order: column.order },
+            });
+        }
+        return reordered;
+      }),
+    ),
   previewTypeChange: protectedProcedure
     .input(
       z.object({

@@ -37,6 +37,9 @@ export default function TablePage() {
   const { mutateAsync: createRow } = api.row.createRow.useMutation();
   const { mutateAsync: deleteRow } = api.row.deleteRow.useMutation();
   const { mutateAsync: deleteColumn } = api.column.deleteColumn.useMutation();
+  const [reordering, setReordering] = useState(false);
+  const { mutateAsync: moveColumnMutation } =
+    api.column.moveColumn.useMutation();
   const [columnBusy, setColumnBusy] = useState(false);
   const [columnError, setColumnError] = useState<string | null>(null);
   const [columnDeleteTarget, setColumnDeleteTarget] = useState<{
@@ -216,7 +219,9 @@ export default function TablePage() {
           ? {
               ...table,
               columns: table.columns.map((existing) =>
-                existing.id === column.id ? column : existing,
+                existing.id === column.id
+                  ? { ...existing, type: column.type }
+                  : existing,
               ),
             }
           : table,
@@ -236,6 +241,34 @@ export default function TablePage() {
     } finally {
       rowOperation.current = false;
       setColumnBusy(false);
+    }
+  }
+
+  async function reorderColumn(columnId: string, direction: "left" | "right") {
+    if (rowOperation.current || pendingCells.current.size) return;
+    rowOperation.current = true;
+    setColumnBusy(true);
+    setReordering(true);
+    setColumnError(null);
+    try {
+      await utils.table.getTableWithColumns.cancel({ tableId });
+      const columns = await moveColumnMutation({
+        tableId,
+        columnId,
+        direction,
+      });
+      utils.table.getTableWithColumns.setData({ tableId }, (table) =>
+        table ? { ...table, columns } : table,
+      );
+      setFocusTarget(null);
+    } catch (cause) {
+      setColumnError(
+        cause instanceof Error ? cause.message : "Could not reorder column",
+      );
+    } finally {
+      rowOperation.current = false;
+      setColumnBusy(false);
+      setReordering(false);
     }
   }
 
@@ -461,9 +494,11 @@ export default function TablePage() {
           {pendingCount > 0
             ? `Saving ${pendingCount} cell${pendingCount === 1 ? "" : "s"}…`
             : columnBusy
-              ? typeTarget
-                ? "Changing column type…"
-                : "Deleting column…"
+              ? reordering
+                ? "Reordering columns…"
+                : typeTarget
+                  ? "Changing column type…"
+                  : "Deleting column…"
               : rowBusy
                 ? "Updating rows…"
                 : saveError || rowError || columnError
@@ -693,10 +728,13 @@ export default function TablePage() {
               >
                 Row
               </th>
-              {table.columns.map((col) => (
+              {table.columns.map((col, columnIndex) => (
                 <ColumnHeader
                   key={col.id}
                   columnId={col.id}
+                  canMoveLeft={columnIndex > 0}
+                  canMoveRight={columnIndex < table.columns.length - 1}
+                  onMove={(direction) => void reorderColumn(col.id, direction)}
                   deleteDisabled={rowBusy || columnBusy || pendingCount > 0}
                   onChangeType={() => {
                     setTypeTarget({
