@@ -86,4 +86,4 @@ npm run lint
 
 Tests use mocked database access. Verify persistence by editing TEXT and NUMBER cells, clearing values and reloading the page while signed in. Verify rollback by blocking `/api/trpc/cell.updateCell` in browser developer tools, editing and saving a cell, and checking that its previous value is restored. Also test editing different cells while a save is pending and scrolling during saves.
 
-If env variables are not configured yet, `SKIP_ENV_VALIDATION=1 npm run lint` lets lint run without credentials. It does not enable Google sign-in or database access.
+Lint uses the ESLint CLI directly, checks all maintained code, and requires zero warnings. It runs without application credentials. Generated Prisma files, `next-env.d.ts` and `.next/` are excluded. Use `npm run lint:fix` for automatic fixes or `npm run check` for lint and TypeScript together.

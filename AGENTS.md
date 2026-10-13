@@ -44,7 +44,7 @@ From the application directory:
 - `npm run dev` starts Next.js with hot reload at http://localhost:3000.
 - `npm run typecheck` checks TypeScript.
 - `npm test` runs focused Node tests with the existing tsx dependency. Backend tests use a mocked Prisma client; they do not prove live PostgreSQL behavior.
-- `npm run lint` runs the project's existing Next.js lint command. When local secrets are absent, `SKIP_ENV_VALIDATION=1 npm run lint` is acceptable for linting only. Do not treat skipped env validation as a configured development environment.
+- `npm run lint` runs ESLint across maintained source, tests, scripts and config, with zero warnings allowed. Generated Prisma files, `next-env.d.ts` and `.next/` are excluded. Linting does not require application environment variables. `npm run lint:fix` applies automatic fixes; `npm run check` runs lint and TypeScript.
 - Run ESLint directly on changed files and Prettier on edited files as appropriate. `git diff --check` catches whitespace errors.
 - Run checks appropriate to the changes and report failures/limitations. Add meaningful tests for security, data integrity, cache rollback and complex interactions; avoid tests that merely mirror trivial implementation details.
 - `npm run db:generate` currently runs `prisma migrate dev`, despite its name. Use `npx prisma generate` for client generation alone. Only run migrations against an explicitly configured development database.

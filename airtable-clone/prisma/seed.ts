@@ -9,8 +9,8 @@ async function seedTable(tableId: string, rowCount = 100_000) {
     orderBy: { order: "asc" },
   })
 
-  let rows = []
-  let cells = []
+  const rows = []
+  const cells = []
 
   for (let i = 0; i < rowCount; i++) {
     const rowId = crypto.randomUUID()
