@@ -84,6 +84,7 @@ Column controls:
 - **Create column** appends the column to the right. Existing rows start with empty values, and cells are created when edited.
 - Failed creation preserves the form and shows an error. **Cancel** closes the form without creating a column.
 - Click a column name (with its pencil icon) to rename it. Enter or **Save** persists the name; Escape or **Cancel** discards the draft. Failed saves keep the editor open and preserve the existing header name.
+- The trash icon in a column header opens confirmation to delete that column and all its values. Cancel preserves it; failed deletion leaves the grid intact. Other columns and rows are preserved, including when deleting the last column.
 - No schema migration is required for column creation or renaming.
 
 ## Verify

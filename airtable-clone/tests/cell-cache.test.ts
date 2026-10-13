@@ -122,3 +122,20 @@ void test("shared parsing preserves text, clears blank values and rejects invali
     assert.throws(() => parseCellValue("NUMBER", value), /finite number/);
   }
 });
+
+void test("deleted columns are removed from cell caches while unrelated pages remain unchanged", async () => {
+  const { removeCachedColumn } = await import("../src/utils/cell-cache");
+  const data = fixture();
+  const updated = removeCachedColumn(data, "col1");
+  assert.deepEqual(updated?.pages[0]?.formattedRows[0]?.cellsByColumnId, {});
+  assert.equal(
+    updated?.pages[0]?.formattedRows[1],
+    data.pages[0]?.formattedRows[1],
+  );
+  assert.equal(updated?.pages[1], data.pages[1]);
+  assert.equal(updated?.pageParams, data.pageParams);
+  assert.equal(
+    data.pages[0]?.formattedRows[0]?.cellsByColumnId.col1?.textValue,
+    "old",
+  );
+});

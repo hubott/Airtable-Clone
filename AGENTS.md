@@ -19,6 +19,7 @@ The application lives in `airtable-clone/` relative to this file. Run npm, Prism
 - `/` is the application login page, with direct Google sign-in and a dashboard link for signed-in users. Root layout renders `AppHeader` with dashboard navigation and sign-out on every page. `src/app/dashboard/layout.tsx` redirects signed-out visitors to `/`; protected tRPC procedures and ownership checks remain mandatory. NextAuth sign-in/error pages point to `/`. Auth buttons show pending/failure states and use full-page redirects after sign-in/out.
 - Routes: `/dashboard`, `/dashboard/base/[baseId]`, `/dashboard/table/[tableId]`. Shared client UI lives in `src/app/_components/`.
 - The table page fetches ordered columns with `getTableWithColumns` and cursor-paginated rows with `getRows`. Rows expose `cellsByColumnId`. Pagination uses `(order, id)` value boundaries scoped to the owned table, so deleting a cursor row does not break infinite scrolling.
+- `column.deleteColumn` locks an owned column and deletes its dependent cells before the column in a transaction. Header trash buttons open explicit confirmation; successful deletion removes metadata and cached cell values. Cell saves/row operations are coordinated with deletion; deleting the final column is allowed and preserves rows.
 - `column.renameColumn` applies ownership checks in an atomic `updateManyAndReturn` write, with the same trimmed 1–100 character name validation as creation. `ColumnHeader.tsx` supports click-to-rename, Enter/Save, Escape/Cancel and error feedback; only confirmed names update the metadata cache.
 - `column.createColumn` validates ownership and locks the table before allocating the next column order. Names are trimmed and limited to 1–100 characters; types are TEXT/NUMBER. `AddColumnForm.tsx` updates the metadata cache after success. Existing rows are not rewritten; cells remain absent until edited.
 - Row creation locks the owned table and allocates `first.order - 1` so new rows appear at the top, with empty cells created lazily by cell upserts. Row deletion locks the owned row and explicitly deletes its cells in the same transaction. Row controls wait for server confirmation before updating cached pages.
@@ -59,7 +60,7 @@ From the application directory:
 
 1. Complete editable TEXT/NUMBER cells: safe saves, validation, clearing values, optimistic updates, rollback, keyboard interaction and responsive rendering. Verify in a real authenticated browser with a development database.
 2. Row creation/deletion and stable ordering are implemented. Arrow and Tab keyboard navigation are implemented, including virtualized rows and loading the next page. Single-cell copy/paste is implemented. The next phase is column management; multi-cell range selection and paste remain in the advanced spreadsheet phase.
-3. Column creation and renaming are implemented. Next: column deletion, safe type changes and reordering; additional types later.
+3. Column creation, renaming and confirmed deletion are implemented. Next: safe type changes and reordering; additional types later.
 4. Base/table creation, rename/delete and navigation improvements.
 5. Sorting, filtering, search, resizing, range selection and copy/paste; validate large-dataset performance.
 6. Portfolio polish: consistent UI, responsive design, useful tests, deployment, screenshots and a professional README.

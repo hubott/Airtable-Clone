@@ -14,12 +14,16 @@ export default function ColumnHeader({
   name,
   type,
   width,
+  onDelete,
+  deleteDisabled = false,
 }: {
   columnId: string;
   tableId: string;
   name: string;
   type: "TEXT" | "NUMBER";
   width: string;
+  onDelete: () => void;
+  deleteDisabled?: boolean;
 }) {
   const utils = api.useUtils();
   const returnFocus = useRef(false);
@@ -155,6 +159,30 @@ export default function ColumnHeader({
       >
         {type === "TEXT" ? "Text" : "Numbers only"}
       </span>
+      {!editing && (
+        <button
+          type="button"
+          aria-label={`Delete column ${name}`}
+          title="Delete column"
+          disabled={deleteDisabled || mutation.isPending}
+          onClick={onDelete}
+          className="ml-2 inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+        >
+          <svg
+            aria-hidden="true"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" />
+          </svg>
+        </button>
+      )}
     </th>
   );
 }

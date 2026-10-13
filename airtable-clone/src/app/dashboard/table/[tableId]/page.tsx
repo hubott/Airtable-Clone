@@ -16,7 +16,11 @@ import {
 import { EditableCell } from "~/app/_components/EditableCell";
 import { prependCachedRow, removeCachedRow } from "~/utils/row-cache";
 import { parseCellValue } from "~/utils/cell-value";
-import { replaceCachedCell, type CellValue } from "~/utils/cell-cache";
+import {
+  replaceCachedCell,
+  removeCachedColumn,
+  type CellValue,
+} from "~/utils/cell-cache";
 
 export default function TablePage() {
   const params = useParams();
@@ -32,6 +36,13 @@ export default function TablePage() {
   const { mutateAsync } = api.cell.updateCell.useMutation();
   const { mutateAsync: createRow } = api.row.createRow.useMutation();
   const { mutateAsync: deleteRow } = api.row.deleteRow.useMutation();
+  const { mutateAsync: deleteColumn } = api.column.deleteColumn.useMutation();
+  const [columnBusy, setColumnBusy] = useState(false);
+  const [columnError, setColumnError] = useState<string | null>(null);
+  const [columnDeleteTarget, setColumnDeleteTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const rowOperation = useRef(false);
   const [rowBusy, setRowBusy] = useState(false);
   const [rowError, setRowError] = useState<string | null>(null);
@@ -124,6 +135,46 @@ export default function TablePage() {
     } finally {
       rowOperation.current = false;
       setRowBusy(false);
+    }
+  }
+
+  async function confirmColumnDeletion() {
+    if (
+      !columnDeleteTarget ||
+      rowOperation.current ||
+      pendingCells.current.size
+    )
+      return;
+    rowOperation.current = true;
+    setColumnBusy(true);
+    setColumnError(null);
+    const columnId = columnDeleteTarget.id;
+    try {
+      await Promise.all([
+        utils.table.getTableWithColumns.cancel({ tableId }),
+        utils.row.getRows.cancel({ tableId, take: 200 }),
+      ]);
+      await deleteColumn({ columnId });
+      utils.row.getRows.setInfiniteData({ tableId, take: 200 }, (data) =>
+        removeCachedColumn(data, columnId),
+      );
+      utils.table.getTableWithColumns.setData({ tableId }, (table) =>
+        table
+          ? {
+              ...table,
+              columns: table.columns.filter((column) => column.id !== columnId),
+            }
+          : table,
+      );
+      setColumnDeleteTarget(null);
+      setFocusTarget(null);
+    } catch (cause) {
+      setColumnError(
+        cause instanceof Error ? cause.message : "Could not delete column",
+      );
+    } finally {
+      rowOperation.current = false;
+      setColumnBusy(false);
     }
   }
 
@@ -338,9 +389,9 @@ export default function TablePage() {
         <span
           aria-hidden="true"
           className={
-            pendingCount > 0 || rowBusy
+            pendingCount > 0 || rowBusy || columnBusy
               ? "h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-100 border-t-blue-600 motion-reduce:animate-none"
-              : saveError || rowError
+              : saveError || rowError || columnError
                 ? "h-2 w-2 shrink-0 rounded-full bg-red-500"
                 : "h-2 w-2 shrink-0 rounded-full bg-green-500"
           }
@@ -348,11 +399,13 @@ export default function TablePage() {
         <span>
           {pendingCount > 0
             ? `Saving ${pendingCount} cell${pendingCount === 1 ? "" : "s"}…`
-            : rowBusy
-              ? "Updating rows…"
-              : saveError || rowError
-                ? "Some changes could not be saved"
-                : "All changes saved"}
+            : columnBusy
+              ? "Deleting column…"
+              : rowBusy
+                ? "Updating rows…"
+                : saveError || rowError || columnError
+                  ? "Some changes could not be saved"
+                  : "All changes saved"}
         </span>
       </p>
       {saveError && (
@@ -373,7 +426,7 @@ export default function TablePage() {
       <div className="mb-3 flex items-center gap-3">
         <button
           type="button"
-          disabled={rowBusy || pendingCount > 0}
+          disabled={rowBusy || columnBusy || pendingCount > 0}
           onClick={() => void manageRow("create")}
           className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50 disabled:opacity-50"
         >
@@ -390,6 +443,45 @@ export default function TablePage() {
       <div className="mb-3">
         <AddColumnForm tableId={tableId} />
       </div>
+      {columnDeleteTarget && (
+        <div
+          role="alertdialog"
+          aria-modal="false"
+          aria-labelledby="delete-column-title"
+          className="mb-3 rounded border border-red-200 bg-red-50 p-3"
+        >
+          <p id="delete-column-title">
+            Delete column “{columnDeleteTarget.name}” and all its values? This
+            cannot be undone.
+          </p>
+          <div className="mt-2 flex gap-3">
+            <button
+              type="button"
+              disabled={columnBusy || rowBusy || pendingCount > 0}
+              onClick={() => void confirmColumnDeletion()}
+              className="rounded bg-red-700 px-3 py-1 text-white disabled:opacity-50"
+            >
+              {columnBusy ? "Deleting…" : "Delete column"}
+            </button>
+            <button
+              type="button"
+              disabled={columnBusy}
+              onClick={() => {
+                setColumnDeleteTarget(null);
+                setColumnError(null);
+              }}
+              className="rounded border px-3 py-1"
+            >
+              Cancel
+            </button>
+          </div>
+          {columnError && (
+            <p role="alert" className="mt-2 text-sm text-red-700">
+              {columnError}
+            </p>
+          )}
+        </div>
+      )}
       {rowError && (
         <p role="alert" className="mb-2 text-sm text-red-700">
           {rowError}
@@ -409,7 +501,7 @@ export default function TablePage() {
           <div className="mt-2 flex gap-3">
             <button
               type="button"
-              disabled={rowBusy || pendingCount > 0}
+              disabled={rowBusy || columnBusy || pendingCount > 0}
               onClick={() => void manageRow("delete", deleteTarget.id)}
               className="rounded bg-red-700 px-3 py-1 text-white disabled:opacity-50"
             >
@@ -417,7 +509,7 @@ export default function TablePage() {
             </button>
             <button
               type="button"
-              disabled={rowBusy}
+              disabled={rowBusy || columnBusy}
               onClick={() => {
                 setDeleteTarget(null);
                 setRowError(null);
@@ -457,6 +549,11 @@ export default function TablePage() {
                 <ColumnHeader
                   key={col.id}
                   columnId={col.id}
+                  deleteDisabled={rowBusy || columnBusy || pendingCount > 0}
+                  onDelete={() => {
+                    setColumnDeleteTarget({ id: col.id, name: col.name });
+                    setColumnError(null);
+                  }}
                   tableId={tableId}
                   name={col.name}
                   type={col.type}
@@ -499,7 +596,7 @@ export default function TablePage() {
                       type="button"
                       aria-label={`Delete row ${virtualRow.index + 1}`}
                       title="Delete row"
-                      disabled={rowBusy || pendingCount > 0}
+                      disabled={rowBusy || columnBusy || pendingCount > 0}
                       onClick={() => {
                         setDeleteTarget({
                           id: row.id,
@@ -540,7 +637,7 @@ export default function TablePage() {
                             : (cell?.numberValue ?? null)
                         }
                         width={`calc((100% - 88px) / ${table.columns.length})`}
-                        disabled={rowBusy}
+                        disabled={rowBusy || columnBusy}
                         onSave={saveCell}
                         onNavigate={navigateCell}
                       />

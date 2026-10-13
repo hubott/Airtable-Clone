@@ -192,3 +192,89 @@ void test("rename rejects invalid names before attempting a database update", as
     );
   assert.equal(getWrites(), 0);
 });
+
+function deleteSetup(
+  options: { owned?: boolean; authenticated?: boolean; fail?: boolean } = {},
+) {
+  const events: string[] = [];
+  const database = {
+    $queryRaw: async (sql: TemplateStringsArray, id: string, owner: string) => {
+      assert.equal(id, "column");
+      assert.equal(owner, "owner");
+      assert.match(sql.join("?"), /FOR UPDATE OF c/);
+      events.push("lock");
+      return options.owned === false ? [] : [{ id, tableId: "table" }];
+    },
+    cell: {
+      deleteMany: async (args: { where: { columnId: string } }) => {
+        assert.equal(args.where.columnId, "column");
+        events.push("delete-cells");
+        return { count: 2 };
+      },
+    },
+    column: {
+      delete: async () => {
+        events.push("delete-column");
+        if (options.fail) throw new Error("delete failed");
+        return { id: "column" };
+      },
+    },
+    $transaction: async <T>(callback: (tx: unknown) => Promise<T>) => {
+      events.push("begin");
+      try {
+        const result = await callback(database);
+        events.push("commit");
+        return result;
+      } catch (error) {
+        events.push("rollback");
+        throw error;
+      }
+    },
+  };
+  const caller = appRouter.createCaller({
+    db: database as unknown as PrismaClient,
+    headers: new Headers(),
+    session:
+      options.authenticated === false
+        ? null
+        : { user: { id: "owner" }, expires: "2099-01-01" },
+  });
+  return { caller, events };
+}
+void test("column deletion requires authentication and ownership", async () => {
+  const anonymous = deleteSetup({ authenticated: false });
+  await assert.rejects(
+    anonymous.caller.column.deleteColumn({ columnId: "column" }),
+    { code: "UNAUTHORIZED" },
+  );
+  assert.deepEqual(anonymous.events, []);
+  const unowned = deleteSetup({ owned: false });
+  await assert.rejects(
+    unowned.caller.column.deleteColumn({ columnId: "column" }),
+    { code: "NOT_FOUND" },
+  );
+  assert.equal(unowned.events.includes("delete-cells"), false);
+});
+void test("column deletion removes dependent cells before the column in one transaction", async () => {
+  const { caller, events } = deleteSetup();
+  assert.deepEqual(await caller.column.deleteColumn({ columnId: "column" }), {
+    id: "column",
+    tableId: "table",
+  });
+  assert.deepEqual(events, [
+    "begin",
+    "lock",
+    "delete-cells",
+    "delete-column",
+    "commit",
+  ]);
+});
+void test("failed column deletion rolls back instead of committing cell removal", async () => {
+  const { caller, events } = deleteSetup({ fail: true });
+  await assert.rejects(
+    caller.column.deleteColumn({ columnId: "column" }),
+    /delete failed/,
+  );
+  assert.equal(events.at(-1), "rollback");
+  assert.equal(events.includes("commit"), false);
+});

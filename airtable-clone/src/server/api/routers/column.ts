@@ -9,6 +9,31 @@ const columnName = z
   .max(100, "Use at most 100 characters");
 
 export const columnRouter = createTRPCRouter({
+  deleteColumn: protectedProcedure
+    .input(z.object({ columnId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) =>
+      ctx.db.$transaction(
+        async (tx) => {
+          const columns = await tx.$queryRaw<{ id: string; tableId: string }[]>`
+        SELECT c."id", c."tableId" FROM "Column" c
+        JOIN "Table" t ON t."id" = c."tableId"
+        JOIN "Base" b ON b."id" = t."baseId"
+        WHERE c."id" = ${input.columnId} AND b."ownerId" = ${ctx.session.user.id}
+        FOR UPDATE OF c
+      `;
+          const column = columns[0];
+          if (!column)
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Column not found",
+            });
+          await tx.cell.deleteMany({ where: { columnId: input.columnId } });
+          await tx.column.delete({ where: { id: input.columnId } });
+          return column;
+        },
+        { timeout: 30000 },
+      ),
+    ),
   renameColumn: protectedProcedure
     .input(z.object({ columnId: z.string().min(1), name: columnName }))
     .mutation(async ({ ctx, input }) => {

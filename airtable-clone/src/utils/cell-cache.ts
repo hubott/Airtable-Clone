@@ -32,3 +32,24 @@ export function replaceCachedCell(
     }),
   };
 }
+
+export function removeCachedColumn(
+  data: Rows | undefined,
+  columnId: string,
+): Rows | undefined {
+  if (!data) return data;
+  return {
+    ...data,
+    pages: data.pages.map((page) => {
+      let changed = false;
+      const formattedRows = page.formattedRows.map((row) => {
+        if (!(columnId in row.cellsByColumnId)) return row;
+        changed = true;
+        const cellsByColumnId = { ...row.cellsByColumnId };
+        delete cellsByColumnId[columnId];
+        return { ...row, cellsByColumnId };
+      });
+      return changed ? { ...page, formattedRows } : page;
+    }),
+  };
+}
