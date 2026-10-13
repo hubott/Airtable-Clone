@@ -379,7 +379,7 @@ export default function TablePage() {
         </button>
         <InfoTooltip label="Row management tips">
           <p>
-            New rows appear at the top. Use × beside a row number to delete it
+            New rows appear at the top. Use the trash icon beside a row number to delete it
             after confirmation.
           </p>
           <p>Finish pending cell saves before adding or deleting rows.</p>
@@ -484,6 +484,7 @@ export default function TablePage() {
               return (
                 <tr
                   key={row.id}
+                  className="group/row"
                   style={{
                     position: "absolute",
                     top: 0,
@@ -511,9 +512,21 @@ export default function TablePage() {
                         });
                         setRowError(null);
                       }}
-                      className="rounded px-1 text-red-700 hover:bg-red-100 focus:outline-2 focus:outline-blue-500 disabled:opacity-50"
+                      className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:text-red-600 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-40 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within/row:opacity-100 [@media(hover:hover)]:group-hover/row:opacity-100"
                     >
-                      ×
+                      <svg
+                        aria-hidden="true"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" />
+                      </svg>
                     </button>
                   </td>
                   {table.columns.map((col) => {
