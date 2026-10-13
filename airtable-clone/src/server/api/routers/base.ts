@@ -5,6 +5,18 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 
 export const baseRouter = createTRPCRouter({
+  renameBase: protectedProcedure
+    .input(z.object({ baseId: z.string().min(1), name: resourceName }))
+    .mutation(async ({ ctx, input }) => {
+      const resources = await ctx.db.base.updateManyAndReturn({
+        where: { id: input.baseId, ownerId: ctx.session.user.id },
+        data: { name: input.name },
+      });
+      const resource = resources[0];
+      if (!resource)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Base not found" });
+      return resource;
+    }),
   getBase: protectedProcedure
     .input(z.object({ baseId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {

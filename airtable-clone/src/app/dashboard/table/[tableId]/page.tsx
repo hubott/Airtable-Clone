@@ -6,6 +6,7 @@ import Link from "next/link";
 import ColumnHeader from "~/app/_components/ColumnHeader";
 import AddColumnForm from "~/app/_components/AddColumnForm";
 import InfoTooltip from "~/app/_components/InfoTooltip";
+import ResourceNameEditor from "~/app/_components/ResourceNameEditor";
 import LoadingSpinner from "~/app/_components/LoadingSpinner";
 import { api } from "~/trpc/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -476,7 +477,13 @@ export default function TablePage() {
         Back to base
       </Link>
       <div className="mb-2 flex items-center gap-2">
-        <h1 className="text-xl font-semibold">{table.name}</h1>
+        <h1
+          className="min-w-0 truncate text-xl font-semibold"
+          title={table.name}
+        >
+          {table.name}
+        </h1>
+        <ResourceNameEditor resource="table" id={tableId} name={table.name} />
         <InfoTooltip label="Table editing tips">
           <p>
             Click to select. Double-click or Enter to edit. Enter saves; Escape

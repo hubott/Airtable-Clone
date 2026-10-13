@@ -72,6 +72,12 @@ Cell controls:
 
 Use **← Back to dashboard** from a base and **← Back to base** from a table to navigate upward.
 
+Base/table renaming:
+
+- Choose **Rename** beside a base or table in its list, or beside the resource heading. Names must contain 1–100 characters after trimming.
+- **Save** or Enter persists the name; **Cancel** or Escape discards the draft. Failed saves preserve the draft and show an error.
+- Names update in both list and detail views; resource URLs and table contents remain unchanged.
+
 Row controls:
 
 - **+ Add row** inserts a blank row at the top and scrolls to it.

@@ -5,6 +5,18 @@ import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 
 export const tableRouter = createTRPCRouter({
+  renameTable: protectedProcedure
+    .input(z.object({ tableId: z.string().min(1), name: resourceName }))
+    .mutation(async ({ ctx, input }) => {
+      const resources = await ctx.db.table.updateManyAndReturn({
+        where: { id: input.tableId, base: { ownerId: ctx.session.user.id } },
+        data: { name: input.name },
+      });
+      const resource = resources[0];
+      if (!resource)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Table not found" });
+      return resource;
+    }),
   createTable: protectedProcedure
     .input(z.object({ baseId: z.string().min(1), name: resourceName }))
     .mutation(async ({ ctx, input }) =>
