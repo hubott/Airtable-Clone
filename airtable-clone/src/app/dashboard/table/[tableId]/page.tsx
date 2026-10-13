@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
+import InfoTooltip from "~/app/_components/InfoTooltip";
+import LoadingSpinner from "~/app/_components/LoadingSpinner";
 import { api } from "~/trpc/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -294,25 +297,61 @@ export default function TablePage() {
   /* ---------------- LOADING STATES ---------------- */
   if (tableError || rowsError)
     return <div role="alert">{tableError?.message ?? rowsError?.message}</div>;
-  if (tableLoading || rowsLoading) return <div>Loading…</div>;
+  if (tableLoading || rowsLoading)
+    return <LoadingSpinner label="Loading your table…" />;
   if (!table) return <div>Table not found</div>;
 
   /* ---------------- RENDER ---------------- */
   return (
     <div>
-      <h1 className="mb-2 text-xl font-semibold">{table.name}</h1>
-      <p className="mb-2 text-sm text-gray-600">
-        Click to select. Double-click or press Enter to edit. Enter saves;
-        Escape or clicking away cancels. Arrows move between cells;
-        Tab/Shift+Tab move forward/back and save while editing. Ctrl/Cmd+C
-        copies a selected cell; Ctrl/Cmd+V pastes and saves one value.
-      </p>
-      <p role="status" className="mb-2 min-h-5 text-sm text-gray-600">
-        {pendingCount > 0
-          ? `Saving ${pendingCount} cell${pendingCount === 1 ? "" : "s"}…`
-          : saveError
-            ? "Some changes could not be saved"
-            : "All changes saved"}
+      <Link
+        href={`/dashboard/base/${table.baseId}`}
+        className="mb-3 inline-flex items-center gap-2 rounded text-sm font-medium text-slate-600 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+      >
+        <span aria-hidden="true">←</span>
+        Back to base
+      </Link>
+      <div className="mb-2 flex items-center gap-2">
+        <h1 className="text-xl font-semibold">{table.name}</h1>
+        <InfoTooltip label="Table editing tips">
+          <p>
+            Click to select. Double-click or Enter to edit. Enter saves; Escape
+            or clicking away cancels.
+          </p>
+          <p>
+            Arrows move between cells. Tab/Shift+Tab move forward/back and save
+            while editing.
+          </p>
+          <p>
+            Ctrl/Cmd+C copies a selected cell. Ctrl/Cmd+V pastes and saves one
+            value.
+          </p>
+        </InfoTooltip>
+      </div>
+      <p
+        role="status"
+        aria-live="polite"
+        className="mb-2 flex min-h-5 items-center gap-2 text-sm text-gray-600"
+      >
+        <span
+          aria-hidden="true"
+          className={
+            pendingCount > 0 || rowBusy
+              ? "h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-100 border-t-blue-600 motion-reduce:animate-none"
+              : saveError || rowError
+                ? "h-2 w-2 shrink-0 rounded-full bg-red-500"
+                : "h-2 w-2 shrink-0 rounded-full bg-green-500"
+          }
+        />
+        <span>
+          {pendingCount > 0
+            ? `Saving ${pendingCount} cell${pendingCount === 1 ? "" : "s"}…`
+            : rowBusy
+              ? "Updating rows…"
+              : saveError || rowError
+                ? "Some changes could not be saved"
+                : "All changes saved"}
+        </span>
       </p>
       {saveError && (
         <div role="alert" className="mb-2 flex gap-3 text-sm text-red-700">
@@ -338,9 +377,13 @@ export default function TablePage() {
         >
           {rowBusy ? "Updating rows…" : "+ Add row"}
         </button>
-        <span className="text-sm text-gray-600">
-          New rows appear at the top.
-        </span>
+        <InfoTooltip label="Row management tips">
+          <p>
+            New rows appear at the top. Use the trash icon beside a row number to delete it
+            after confirmation.
+          </p>
+          <p>Finish pending cell saves before adding or deleting rows.</p>
+        </InfoTooltip>
       </div>
       {rowError && (
         <p role="alert" className="mb-2 text-sm text-red-700">
@@ -441,6 +484,7 @@ export default function TablePage() {
               return (
                 <tr
                   key={row.id}
+                  className="group/row"
                   style={{
                     position: "absolute",
                     top: 0,
@@ -468,9 +512,21 @@ export default function TablePage() {
                         });
                         setRowError(null);
                       }}
-                      className="rounded px-1 text-red-700 hover:bg-red-100 focus:outline-2 focus:outline-blue-500 disabled:opacity-50"
+                      className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:text-red-600 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:opacity-40 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within/row:opacity-100 [@media(hover:hover)]:group-hover/row:opacity-100"
                     >
-                      ×
+                      <svg
+                        aria-hidden="true"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6" />
+                      </svg>
                     </button>
                   </td>
                   {table.columns.map((col) => {
@@ -502,9 +558,7 @@ export default function TablePage() {
         </table>
 
         {isFetchingNextPage && (
-          <div className="py-2 text-center text-sm text-gray-500">
-            Loading more…
-          </div>
+          <LoadingSpinner label="Loading more rows…" fullPage={false} />
         )}
       </div>
     </div>
