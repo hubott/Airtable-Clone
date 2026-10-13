@@ -28,7 +28,7 @@ The application lives in `airtable-clone/` relative to this file. Run npm, Prism
 - `column.renameColumn` applies ownership checks in an atomic `updateManyAndReturn` write, with the same trimmed 1–100 character name validation as creation. `ColumnHeader.tsx` supports click-to-rename, Enter/Save, Escape/Cancel and error feedback; only confirmed names update the metadata cache.
 - `column.createColumn` validates ownership and locks the table before allocating the next column order. Names are trimmed and limited to 1–100 characters; types are TEXT/NUMBER. `AddColumnForm.tsx` updates the metadata cache after success. Existing rows are not rewritten; cells remain absent until edited.
 - `row.createRows` creates 1–1,000 rows per request with `createManyAndReturn`, under the owned table lock. It reserves a contiguous range before the first row, rejects integer underflow and returns rows in order. The toolbar count defaults to one; cached insertion preserves existing pagination boundaries.
-- Row creation locks the owned table and allocates `first.order - 1` so new rows appear at the top, with empty cells created lazily by cell upserts. Row deletion locks the owned row and explicitly deletes its cells in the same transaction. Row controls wait for server confirmation before updating cached pages.
+- Single and bulk row creation share `reserveRowOrder` in the row router for ownership, table locking and integer-boundary checks. Row creation locks the owned table and allocates `first.order - 1` so new rows appear at the top, with empty cells created lazily by cell upserts. Row deletion locks the owned row and explicitly deletes its cells in the same transaction. Row controls wait for server confirmation before updating cached pages.
 - Columns render at 240px each in a horizontally scrollable table, with an 88px sticky row-control gutter. Header and body widths must remain synchronized. Keyboard focus adjusts horizontal scrolling to keep the target cell visible beyond the sticky gutter.
 - TanStack Virtual renders 36px rows. The current grid fetches 200 rows per page and overscans 12. Measure performance before changing these settings; keep stable row IDs as React and virtualizer keys. Memoize `getItemKey` and keep `useFlushSync: false` for React 19 compatibility.
 - `EditableCell.tsx` owns edit drafts and is memoized. The table page owns async saves and optimistic updates so writes and errors survive individual cells unmounting. `src/utils/cell-cache.ts` updates only the affected cell; rollback must not restore an entire stale page snapshot.
@@ -73,3 +73,21 @@ From the application directory:
 6. Portfolio polish: consistent UI, responsive design, useful tests, deployment, screenshots and a professional README.
 
 Stay within the phase requested by the user. Explain what changed, why, what was verified and any practical limitations.
+
+
+## SonarQube Quality Assurance
+
+This project uses SonarQube Cloud.
+
+- Consult SonarQube MCP findings when investigating
+  code quality, maintainability or security issues.
+- Review relevant findings before substantial refactoring.
+- Avoid unnecessary code duplication, particularly in
+  tRPC routers, React components and database logic.
+- Maintain the project's quality gate requirements,
+  including a maximum of 3% duplicated new code.
+- Do not weaken quality gates or suppress findings
+  without explicit approval.
+- After changes, run tests, ESLint and TypeScript checks.
+- When a new SonarQube analysis is available, verify
+  its quality gate status.
