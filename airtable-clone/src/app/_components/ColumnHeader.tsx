@@ -62,7 +62,7 @@ export default function ColumnHeader({
   return (
     <th
       scope="col"
-      className="border border-gray-300 px-2 py-1 text-left"
+      className="overflow-hidden border border-gray-300 px-2 py-1 text-left"
       style={{ width }}
     >
       {editing ? (
@@ -137,16 +137,16 @@ export default function ColumnHeader({
             }
           }}
           aria-label={`Rename column ${name}`}
-          title="Click to rename column"
+          title={`${name} — click to rename`}
           onClick={() => {
             setDraft(name);
             setError(null);
             setEditing(true);
           }}
-          className="rounded px-1 text-left hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-blue-500"
+          className="flex w-full min-w-0 items-center gap-2 rounded px-1 text-left hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-500"
         >
-          {name}
-          <span aria-hidden="true" className="ml-2 text-xs text-slate-400">
+          <span className="min-w-0 flex-1 truncate">{name}</span>
+          <span aria-hidden="true" className="shrink-0 text-xs text-slate-400">
             ✎
           </span>
         </button>
