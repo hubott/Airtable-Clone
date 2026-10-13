@@ -4,6 +4,7 @@
 import CreateResourceForm from "~/app/_components/CreateResourceForm";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import DeleteResourceButton from "~/app/_components/DeleteResourceButton";
 import ResourceNameEditor from "~/app/_components/ResourceNameEditor";
 import LoadingSpinner from "~/app/_components/LoadingSpinner";
 import { api } from "~/trpc/react";
@@ -50,6 +51,7 @@ export default function BasePage() {
           {base.name}
         </h1>
         <ResourceNameEditor resource="base" id={base.id} name={base.name} />
+        <DeleteResourceButton resource="base" id={base.id} name={base.name} />
       </div>
       <CreateResourceForm
         resource="table"
@@ -82,6 +84,11 @@ export default function BasePage() {
               <span className="block truncate">{table.name}</span>
             </Link>
             <ResourceNameEditor
+              resource="table"
+              id={table.id}
+              name={table.name}
+            />
+            <DeleteResourceButton
               resource="table"
               id={table.id}
               name={table.name}

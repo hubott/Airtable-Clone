@@ -6,6 +6,7 @@ import Link from "next/link";
 import ColumnHeader from "~/app/_components/ColumnHeader";
 import AddColumnForm from "~/app/_components/AddColumnForm";
 import InfoTooltip from "~/app/_components/InfoTooltip";
+import DeleteResourceButton from "~/app/_components/DeleteResourceButton";
 import ResourceNameEditor from "~/app/_components/ResourceNameEditor";
 import LoadingSpinner from "~/app/_components/LoadingSpinner";
 import { api } from "~/trpc/react";
@@ -27,6 +28,7 @@ const COLUMN_WIDTH = 240;
 const ROW_CONTROL_WIDTH = 88;
 
 export default function TablePage() {
+  const [tableDeleting, setTableDeleting] = useState(false);
   const params = useParams();
   const tableId = params.tableId as string;
   const [focusTarget, setFocusTarget] = useState<{
@@ -484,6 +486,16 @@ export default function TablePage() {
           {table.name}
         </h1>
         <ResourceNameEditor resource="table" id={tableId} name={table.name} />
+        <DeleteResourceButton
+          resource="table"
+          onPendingChange={(pending) => {
+            rowOperation.current = pending;
+            setTableDeleting(pending);
+          }}
+          id={tableId}
+          name={table.name}
+          disabled={pendingCount > 0 || rowBusy || columnBusy || tableDeleting}
+        />
         <InfoTooltip label="Table editing tips">
           <p>
             Click to select. Double-click or Enter to edit. Enter saves; Escape
@@ -507,7 +519,7 @@ export default function TablePage() {
         <span
           aria-hidden="true"
           className={
-            pendingCount > 0 || rowBusy || columnBusy
+            pendingCount > 0 || rowBusy || columnBusy || tableDeleting
               ? "h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-100 border-t-blue-600 motion-reduce:animate-none"
               : saveError || rowError || columnError
                 ? "h-2 w-2 shrink-0 rounded-full bg-red-500"
@@ -517,17 +529,19 @@ export default function TablePage() {
         <span>
           {pendingCount > 0
             ? `Saving ${pendingCount} cell${pendingCount === 1 ? "" : "s"}…`
-            : columnBusy
-              ? reordering
-                ? "Reordering columns…"
-                : typeTarget
-                  ? "Changing column type…"
-                  : "Deleting column…"
-              : rowBusy
-                ? "Updating rows…"
-                : saveError || rowError || columnError
-                  ? "Some changes could not be saved"
-                  : "All changes saved"}
+            : tableDeleting
+              ? "Deleting table…"
+              : columnBusy
+                ? reordering
+                  ? "Reordering columns…"
+                  : typeTarget
+                    ? "Changing column type…"
+                    : "Deleting column…"
+                : rowBusy
+                  ? "Updating rows…"
+                  : saveError || rowError || columnError
+                    ? "Some changes could not be saved"
+                    : "All changes saved"}
         </span>
       </p>
       {saveError && (
@@ -548,7 +562,7 @@ export default function TablePage() {
       <div className="mb-3 flex items-center gap-3">
         <button
           type="button"
-          disabled={rowBusy || columnBusy || pendingCount > 0}
+          disabled={rowBusy || columnBusy || tableDeleting || pendingCount > 0}
           onClick={() => void manageRow("create")}
           className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50 disabled:opacity-50"
         >
@@ -708,7 +722,9 @@ export default function TablePage() {
           <div className="mt-2 flex gap-3">
             <button
               type="button"
-              disabled={rowBusy || columnBusy || pendingCount > 0}
+              disabled={
+                rowBusy || columnBusy || tableDeleting || pendingCount > 0
+              }
               onClick={() => void manageRow("delete", deleteTarget.id)}
               className="rounded bg-red-700 px-3 py-1 text-white disabled:opacity-50"
             >
@@ -716,7 +732,7 @@ export default function TablePage() {
             </button>
             <button
               type="button"
-              disabled={rowBusy || columnBusy}
+              disabled={rowBusy || columnBusy || tableDeleting}
               onClick={() => {
                 setDeleteTarget(null);
                 setRowError(null);
@@ -764,7 +780,9 @@ export default function TablePage() {
                   canMoveLeft={columnIndex > 0}
                   canMoveRight={columnIndex < table.columns.length - 1}
                   onMove={(direction) => void reorderColumn(col.id, direction)}
-                  deleteDisabled={rowBusy || columnBusy || pendingCount > 0}
+                  deleteDisabled={
+                    rowBusy || columnBusy || tableDeleting || pendingCount > 0
+                  }
                   onChangeType={() => {
                     setTypeTarget({
                       id: col.id,
@@ -821,7 +839,12 @@ export default function TablePage() {
                       type="button"
                       aria-label={`Delete row ${virtualRow.index + 1}`}
                       title="Delete row"
-                      disabled={rowBusy || columnBusy || pendingCount > 0}
+                      disabled={
+                        rowBusy ||
+                        columnBusy ||
+                        tableDeleting ||
+                        pendingCount > 0
+                      }
                       onClick={() => {
                         setDeleteTarget({
                           id: row.id,
@@ -862,7 +885,7 @@ export default function TablePage() {
                             : (cell?.numberValue ?? null)
                         }
                         width={`${COLUMN_WIDTH}px`}
-                        disabled={rowBusy || columnBusy}
+                        disabled={rowBusy || columnBusy || tableDeleting}
                         onSave={saveCell}
                         onNavigate={navigateCell}
                       />

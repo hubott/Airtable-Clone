@@ -3,6 +3,7 @@
 
 import { useRouter } from "next/navigation";
 import CreateResourceForm from "~/app/_components/CreateResourceForm";
+import DeleteResourceButton from "~/app/_components/DeleteResourceButton";
 import ResourceNameEditor from "~/app/_components/ResourceNameEditor";
 import LoadingSpinner from "~/app/_components/LoadingSpinner";
 import { api } from "~/trpc/react";
@@ -51,6 +52,11 @@ export default function Dashboard() {
               <span className="block truncate">{base.name}</span>
             </Link>
             <ResourceNameEditor resource="base" id={base.id} name={base.name} />
+            <DeleteResourceButton
+              resource="base"
+              id={base.id}
+              name={base.name}
+            />
           </li>
         ))}
       </ul>
