@@ -10,7 +10,7 @@ An Airtable-style application for organizing projects in editable spreadsheet ta
 - Bases and tables scoped to the signed-in owner.
 - Editable TEXT and NUMBER cells with validation, optimistic saves and rollback.
 - Column creation, renaming, deletion and safe Text/Number conversions with previews, and column reordering.
-- Row creation and confirmed deletion with transactional cell cleanup.
+- Bulk creation of 1–1,000 rows per request and confirmed deletion with transactional cell cleanup.
 - Horizontal scrolling with readable column widths and pinned row controls.
 - Virtualized rows and cursor pagination that survives row deletion.
 - Arrow/Tab keyboard navigation and single-cell copy/paste.

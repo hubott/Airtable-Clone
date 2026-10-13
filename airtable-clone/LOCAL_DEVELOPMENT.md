@@ -87,7 +87,7 @@ Base/table deletion:
 
 Row controls:
 
-- **+ Add row** inserts a blank row at the top and scrolls to it.
+- Set **Rows** beside **+ Add row(s)** to a whole number from 1 to 1,000. The default is one. A single request creates the batch together at the top and scrolls to it; failures leave the grid unchanged.
 - The **trash icon** beside a row number opens a deletion confirmation. Confirming removes the row and all its cells; Cancel preserves it.
 - Row changes update the grid after the server confirms success. Failures keep the existing grid data and show an error.
 - Finish pending cell saves before adding or deleting rows. Cell editing is disabled briefly during row operations.

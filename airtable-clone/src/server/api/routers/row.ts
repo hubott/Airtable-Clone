@@ -3,6 +3,46 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 
 export const rowRouter = createTRPCRouter({
+  createRows: protectedProcedure
+    .input(
+      z.object({
+        tableId: z.string().min(1),
+        count: z.number().int().min(1).max(1000),
+      }),
+    )
+    .mutation(async ({ ctx, input }) =>
+      ctx.db.$transaction(async (tx) => {
+        const tables = await tx.$queryRaw<{ id: string }[]>`
+        SELECT t."id" FROM "Table" t JOIN "Base" b ON b."id"=t."baseId"
+        WHERE t."id"=${input.tableId} AND b."ownerId"=${ctx.session.user.id} FOR UPDATE OF t
+      `;
+        if (!tables.length)
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Table not found",
+          });
+        const first = await tx.row.findFirst({
+          where: { tableId: input.tableId },
+          orderBy: [{ order: "asc" }, { id: "asc" }],
+          select: { order: true },
+        });
+        const start = first ? first.order - input.count : 0;
+        if (start < -2147483648)
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Row order limit reached",
+          });
+        const rows = await tx.row.createManyAndReturn({
+          data: Array.from({ length: input.count }, (_, index) => ({
+            tableId: input.tableId,
+            order: start + index,
+          })),
+        });
+        return rows
+          .sort((a, b) => a.order - b.order)
+          .map((row) => ({ ...row, cellsByColumnId: {} }));
+      }),
+    ),
   createRow: protectedProcedure
     .input(z.object({ tableId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) =>
