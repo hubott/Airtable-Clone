@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import AddColumnForm from "~/app/_components/AddColumnForm";
 import InfoTooltip from "~/app/_components/InfoTooltip";
 import LoadingSpinner from "~/app/_components/LoadingSpinner";
 import { api } from "~/trpc/react";
@@ -379,11 +380,14 @@ export default function TablePage() {
         </button>
         <InfoTooltip label="Row management tips">
           <p>
-            New rows appear at the top. Use the trash icon beside a row number to delete it
-            after confirmation.
+            New rows appear at the top. Use the trash icon beside a row number
+            to delete it after confirmation.
           </p>
           <p>Finish pending cell saves before adding or deleting rows.</p>
         </InfoTooltip>
+      </div>
+      <div className="mb-3">
+        <AddColumnForm tableId={tableId} />
       </div>
       {rowError && (
         <p role="alert" className="mb-2 text-sm text-red-700">
