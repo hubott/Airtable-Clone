@@ -309,12 +309,30 @@ export default function TablePage() {
         Tab/Shift+Tab move forward/back and save while editing. Ctrl/Cmd+C
         copies a selected cell; Ctrl/Cmd+V pastes and saves one value.
       </p>
-      <p role="status" className="mb-2 min-h-5 text-sm text-gray-600">
-        {pendingCount > 0
-          ? `Saving ${pendingCount} cell${pendingCount === 1 ? "" : "s"}…`
-          : saveError
-            ? "Some changes could not be saved"
-            : "All changes saved"}
+      <p
+        role="status"
+        aria-live="polite"
+        className="mb-2 flex min-h-5 items-center gap-2 text-sm text-gray-600"
+      >
+        <span
+          aria-hidden="true"
+          className={
+            pendingCount > 0 || rowBusy
+              ? "h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-blue-100 border-t-blue-600 motion-reduce:animate-none"
+              : saveError || rowError
+                ? "h-2 w-2 shrink-0 rounded-full bg-red-500"
+                : "h-2 w-2 shrink-0 rounded-full bg-green-500"
+          }
+        />
+        <span>
+          {pendingCount > 0
+            ? `Saving ${pendingCount} cell${pendingCount === 1 ? "" : "s"}…`
+            : rowBusy
+              ? "Updating rows…"
+              : saveError || rowError
+                ? "Some changes could not be saved"
+                : "All changes saved"}
+        </span>
       </p>
       {saveError && (
         <div role="alert" className="mb-2 flex gap-3 text-sm text-red-700">
