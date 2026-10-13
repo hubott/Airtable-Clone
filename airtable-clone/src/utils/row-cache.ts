@@ -5,15 +5,19 @@ export function prependCachedRow(
   data: Rows | undefined,
   row: RouterOutputs["row"]["createRow"],
 ): Rows | undefined {
+  return prependCachedRows(data, [row]);
+}
+
+export function prependCachedRows(
+  data: Rows | undefined,
+  rows: RouterOutputs["row"]["createRows"],
+): Rows | undefined {
   if (!data) return data;
   return {
     ...data,
     pages: data.pages.map((page, index) =>
       index === 0
-        ? {
-            ...page,
-            formattedRows: [row, ...page.formattedRows],
-          }
+        ? { ...page, formattedRows: [...rows, ...page.formattedRows] }
         : page,
     ),
   };

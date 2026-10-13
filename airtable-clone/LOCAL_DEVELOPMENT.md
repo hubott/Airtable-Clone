@@ -46,7 +46,7 @@ npm run db:migrate
 
 The script creates a PostgreSQL container using the database name, password and port from `DATABASE_URL`. A Homebrew PostgreSQL installation is another option; create the matching database/user before running migrations.
 
-A fresh database has no bases or tables. Sign in first to create your user, then create owned sample data using Prisma Studio (`npm run db:studio`) or a deliberate development-only fixture. The current UI can add rows to existing tables but cannot create tables yet. The existing seed script requires an existing table and adds 100,000 rows; it is not a fresh-database bootstrap and should not be run automatically.
+A fresh database has no bases or tables. Sign in to create your user, then choose **+ New base** on the dashboard. Enter a name and create it; the app opens the new base. Choose **+ New table** there to create your first table. It opens with a Text column named **Name** and one blank row, ready to edit. Both creation forms support Cancel, show pending/errors, and preserve drafts after failure. The existing seed script requires an existing table and adds 100,000 rows; it is not a fresh-database bootstrap and should not be run automatically.
 
 ## Start and use
 
@@ -70,9 +70,11 @@ Cell controls:
 - Copy/paste inside the editor retains normal text selection behavior; press Enter or Tab to save afterward.
 - Saving is optimistic. Failed writes restore that cell's previous value and show an error above the grid; edit again to retry.
 
+Use **← Back to dashboard** from a base and **← Back to base** from a table to navigate upward.
+
 Row controls:
 
-- **+ Add row** inserts a blank row at the top and scrolls to it.
+- Set **Rows** beside **+ Add row(s)** to a whole number from 1 to 1,000. The default is one. A single request creates the batch together at the top and scrolls to it; failures leave the grid unchanged.
 - The **trash icon** beside a row number opens a deletion confirmation. Confirming removes the row and all its cells; Cancel preserves it.
 - Row changes update the grid after the server confirms success. Failures keep the existing grid data and show an error.
 - Finish pending cell saves before adding or deleting rows. Cell editing is disabled briefly during row operations.
