@@ -1,33 +1,36 @@
 # Airtable Clone
 
-For local setup and editable-cell controls, see [LOCAL_DEVELOPMENT.md](./LOCAL_DEVELOPMENT.md). Project architecture and agent conventions are in [AGENTS.md](../AGENTS.md).
+An Airtable-style application for organizing projects in editable spreadsheet tables. Built as a full-stack portfolio project with Next.js, React, TypeScript, tRPC, Prisma, PostgreSQL and Tailwind CSS.
 
-# Create T3 App
+## Current features
 
-This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
+- Google sign-in with NextAuth and protected dashboard routes.
+- An application login page, dashboard navigation and sign-out from every page.
+- Bases and tables scoped to the signed-in owner.
+- Editable TEXT and NUMBER cells with validation, optimistic saves and rollback.
+- Row creation and confirmed deletion with transactional cell cleanup.
+- Virtualized rows and cursor pagination that survives row deletion.
+- Arrow/Tab keyboard navigation and single-cell copy/paste.
 
-## What's next? How do I make an app with this?
+## Local development
 
-We try to keep this project as simple as possible, so you can start with just the scaffolding we set up for you, and add additional things later when they become necessary.
+See [LOCAL_DEVELOPMENT.md](./LOCAL_DEVELOPMENT.md) for database and Google OAuth setup.
 
-If you are not familiar with the different technologies used in this project, please refer to the respective docs. If you still are in the wind, please join our [Discord](https://t3.gg/discord) and ask for help.
+```sh
+npm ci
+# Configure .env using .env.example and the local development guide.
+npm run dev
+```
 
-- [Next.js](https://nextjs.org)
-- [NextAuth.js](https://next-auth.js.org)
-- [Prisma](https://prisma.io)
-- [Drizzle](https://orm.drizzle.team)
-- [Tailwind CSS](https://tailwindcss.com)
-- [tRPC](https://trpc.io)
+Open http://localhost:3000, choose **Continue with Google**, and access your dashboard after signing in. Signed-in users can also choose **Go to dashboard** from the home page. The header provides **Dashboard** and **Sign out** throughout the app. Signing out returns to the login page.
 
-## Learn More
+## Checks
 
-To learn more about the [T3 Stack](https://create.t3.gg/), take a look at the following resources:
+```sh
+npm run check
+npm test
+```
 
-- [Documentation](https://create.t3.gg/)
-- [Learn the T3 Stack](https://create.t3.gg/en/faq#what-learning-resources-are-currently-available) — Check out these awesome tutorials
+ESLint checks maintained code with zero warnings allowed. Backend tests use mocked database access; real Google sign-in and database persistence need authenticated browser verification.
 
-You can check out the [create-t3-app GitHub repository](https://github.com/t3-oss/create-t3-app) — your feedback and contributions are welcome!
-
-## How do I deploy this?
-
-Follow our deployment guides for [Vercel](https://create.t3.gg/en/deployment/vercel), [Netlify](https://create.t3.gg/en/deployment/netlify) and [Docker](https://create.t3.gg/en/deployment/docker) for more information.
+Project architecture, coding conventions and development priorities are in [AGENTS.md](../AGENTS.md). Next planned work: column management.

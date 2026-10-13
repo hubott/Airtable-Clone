@@ -1,68 +1,97 @@
 import Link from "next/link";
-
-import { LatestPost } from "~/app/_components/post";
 import { auth } from "~/server/auth";
-import { api, HydrateClient } from "~/trpc/server";
 import SignInButton from "./_components/SignInButton";
-import SignOutButton from "./_components/SignOutButton";
 
-export default async function Home() {
-  const hello = await api.post.hello({ text: "from tRPC" });
-  const session = await auth();
-
-  if (session?.user) {
-    void api.post.getLatest.prefetch();
-  }
-
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string | string[] }>;
+}) {
+  const [session, params] = await Promise.all([auth(), searchParams]);
   return (
-    <HydrateClient>
-      <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#2e026d] to-[#15162c] text-white">
-        <div className="container flex flex-col items-center justify-center gap-12 px-4 py-16">
-          <h1 className="text-5xl font-extrabold tracking-tight sm:text-[5rem]">
-            Create <span className="text-[hsl(280,100%,70%)]">T3</span> App
-          </h1>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-8">
-            <Link
-              className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
-              href="https://create.t3.gg/en/usage/first-steps"
-              target="_blank"
-            >
-              <h3 className="text-2xl font-bold">First Steps →</h3>
-              <div className="text-lg">
-                Just the basics - Everything you need to know to set up your
-                database and authentication.
-              </div>
-            </Link>
-            <Link
-              className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
-              href="https://create.t3.gg/en/introduction"
-              target="_blank"
-            >
-              <h3 className="text-2xl font-bold">Documentation →</h3>
-              <div className="text-lg">
-                Learn more about Create T3 App, the libraries it uses, and how
-                to deploy it.
-              </div>
-            </Link>
+    <main className="mx-auto grid min-h-[calc(100svh-81px)] max-w-6xl items-center gap-12 px-6 py-12 lg:grid-cols-2 lg:gap-20">
+      <section>
+        <p className="mb-4 text-sm font-semibold tracking-widest text-blue-600 uppercase">
+          Your work, organized
+        </p>
+        <h1 className="max-w-lg text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
+          A clear space for every idea.
+        </h1>
+        <p className="mt-5 max-w-lg text-lg leading-relaxed text-slate-600">
+          Organize your records in flexible tables. Keep your projects together,
+          edit your data, and make room for what comes next.
+        </p>
+        <div
+          aria-hidden="true"
+          className="mt-8 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+        >
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+            Project workspace
           </div>
-          <div className="flex flex-col items-center gap-2">
-            <p className="text-2xl text-white">
-              {hello ? hello.greeting : "Loading tRPC query..."}
-            </p>
-
-            <div className="flex flex-col items-center justify-center gap-4">
-              <p className="text-center text-2xl text-white">
-                {session && <span>Logged in as {session.user?.name}</span>}
-              </p>
-              {!session?.user ? <SignInButton /> : <SignOutButton />}
-              
-            
+          <div className="grid grid-cols-2 text-sm">
+            <div className="border-r border-b border-slate-200 px-4 py-3 font-medium text-slate-500">
+              Task
             </div>
+            <div className="border-b border-slate-200 px-4 py-3 font-medium text-slate-500">
+              Hours
+            </div>
+            {[
+              { name: "Plan the next release", hours: 4 },
+              { name: "Build something useful", hours: 12 },
+              { name: "Share your progress", hours: 2 },
+            ].map((task) => (
+              <div
+                key={task.name}
+                className="col-span-2 grid grid-cols-2 border-b border-slate-100 last:border-0"
+              >
+                <div className="border-r border-slate-100 px-4 py-3 text-slate-700">
+                  {task.name}
+                </div>
+                <div className="px-4 py-3 text-slate-600">{task.hours}</div>
+              </div>
+            ))}
           </div>
-
-          {session?.user && <LatestPost />}
         </div>
-      </main>
-    </HydrateClient>
+      </section>
+      <section
+        aria-labelledby="login-heading"
+        className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm sm:p-10"
+      >
+        <h2
+          id="login-heading"
+          className="text-2xl font-semibold tracking-tight text-slate-900"
+        >
+          {session?.user ? "Welcome back" : "Sign in to your workspace"}
+        </h2>
+        <p className="mt-3 mb-8 text-slate-600">
+          {session?.user
+            ? `You're signed in as ${session.user.name ?? session.user.email ?? "a member"}. Your bases are ready in your dashboard.`
+            : "Use your Google account to access your bases and tables."}
+        </p>
+        {params.error && (
+          <p
+            role="alert"
+            className="mb-5 rounded-lg bg-red-50 p-3 text-sm text-red-700"
+          >
+            Sign-in couldn’t be completed. Please try again or use the Google
+            account you originally signed in with.
+          </p>
+        )}
+        {session?.user ? (
+          <Link
+            href="/dashboard"
+            className="block rounded-lg bg-blue-600 px-5 py-3 text-center font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          >
+            Go to dashboard
+          </Link>
+        ) : (
+          <SignInButton />
+        )}
+        <p className="mt-6 text-sm leading-relaxed text-slate-500">
+          Your bases belong to your account. You can sign out from the
+          navigation bar on any page.
+        </p>
+      </section>
+    </main>
   );
 }

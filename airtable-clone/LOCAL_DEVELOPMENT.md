@@ -54,7 +54,7 @@ A fresh database has no bases or tables. Sign in first to create your user, then
 npm run dev
 ```
 
-Open http://localhost:3000, sign in, then visit http://localhost:3000/dashboard and open a base/table. Changes to source files refresh automatically. Restart the dev server after changing `.env`. Use port 3000 so the local auth URL and Google callback agree.
+Open http://localhost:3000 and choose **Continue with Google**. Successful sign-in takes you to your dashboard, where you can open a base/table. If already signed in, the home page shows **Go to dashboard**. The shared navigation bar includes **Dashboard** and **Sign out** on every page. Signing out returns you to the login page; visiting any dashboard route while signed out redirects there too. Changes to source files refresh automatically. Restart the dev server after changing `.env`. Use port 3000 so the local auth URL and Google callback agree.
 
 Cell controls:
 
@@ -86,6 +86,6 @@ npm test
 npm run lint
 ```
 
-Tests use mocked database access. Verify persistence by editing TEXT and NUMBER cells, clearing values and reloading the page while signed in. Verify rollback by blocking `/api/trpc/cell.updateCell` in browser developer tools, editing and saving a cell, and checking that its previous value is restored. Also test editing different cells while a save is pending and scrolling during saves.
+Verify authentication manually: sign in from `/`, open a table and sign out from its header. Confirm you return to `/` and visiting `/dashboard` while signed out redirects to login. Sign-in failures should show an error on the login page, and auth buttons should prevent repeated clicks while pending. Automated tests use mocked database access. Verify persistence by editing TEXT and NUMBER cells, clearing values and reloading the page while signed in. Verify rollback by blocking `/api/trpc/cell.updateCell` in browser developer tools, editing and saving a cell, and checking that its previous value is restored. Also test editing different cells while a save is pending and scrolling during saves.
 
 Lint uses the ESLint CLI directly, checks all maintained code, and requires zero warnings. It runs without application credentials. Generated Prisma files, `next-env.d.ts` and `.next/` are excluded. Use `npm run lint:fix` for automatic fixes or `npm run check` for lint and TypeScript together.
