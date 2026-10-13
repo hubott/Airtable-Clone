@@ -1,39 +1,34 @@
 import { z } from "zod";
-import { TRPCError } from "@trpc/server"
+import { TRPCError } from "@trpc/server";
 
-import {
-  createTRPCRouter,
-  protectedProcedure,
-} from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 
 export const tableRouter = createTRPCRouter({
   getTableWithColumns: protectedProcedure
     .input(z.object({ tableId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const table = await ctx.db.table.findUnique({
-        where: { id: input.tableId },
+      const table = await ctx.db.table.findFirst({
+        where: { id: input.tableId, base: { ownerId: ctx.session.user.id } },
         include: {
           columns: { orderBy: { order: "asc" } },
         },
-      })
+      });
 
       if (!table) {
         throw new TRPCError({
           code: "NOT_FOUND",
           message: `No table with id '${input.tableId}'`,
-        })
+        });
       }
-      return table
+      return table;
     }),
 
-    getTablesByBase: protectedProcedure
+  getTablesByBase: protectedProcedure
     .input(z.object({ baseId: z.string() }))
     .query(async ({ ctx, input }) => {
       return ctx.db.table.findMany({
-        where: { baseId: input.baseId },
-        orderBy: { createdAt: 'asc' },
+        where: { baseId: input.baseId, base: { ownerId: ctx.session.user.id } },
+        orderBy: { createdAt: "asc" },
       });
     }),
-
-
-})
+});

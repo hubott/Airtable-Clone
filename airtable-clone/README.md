@@ -1,3 +1,7 @@
+# Airtable Clone
+
+For local setup and editable-cell controls, see [LOCAL_DEVELOPMENT.md](./LOCAL_DEVELOPMENT.md). Project architecture and agent conventions are in [AGENTS.md](../AGENTS.md).
+
 # Create T3 App
 
 This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
