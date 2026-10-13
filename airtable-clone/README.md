@@ -6,6 +6,7 @@ An Airtable-style application for organizing projects in editable spreadsheet ta
 
 - Google sign-in with NextAuth and protected dashboard routes.
 - An application login page, dashboard navigation and sign-out from every page.
+- Create bases and tables from the dashboard, with usable starter tables and validated names.
 - Bases and tables scoped to the signed-in owner.
 - Editable TEXT and NUMBER cells with validation, optimistic saves and rollback.
 - Column creation, renaming, deletion and safe Text/Number conversions with previews, and column reordering.
@@ -35,4 +36,4 @@ npm test
 
 ESLint checks maintained code with zero warnings allowed. Backend tests use mocked database access; real Google sign-in and database persistence need authenticated browser verification.
 
-Project architecture, coding conventions and development priorities are in [AGENTS.md](../AGENTS.md). Next planned work: base and table management.
+Project architecture, coding conventions and development priorities are in [AGENTS.md](../AGENTS.md). Next planned work: base/table renaming and deletion.

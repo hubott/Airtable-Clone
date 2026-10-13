@@ -13,16 +13,32 @@
       color 150ms ease,
       border-color 150ms ease,
       box-shadow 150ms ease,
-      filter 150ms ease;
+      filter 150ms ease,
+      translate 150ms ease,
+      scale 100ms ease;
   }
 
   button:enabled {
     cursor: pointer;
   }
 
-  button:enabled:hover {
-    filter: brightness(0.96);
-    box-shadow: 0 1px 3px rgb(15 23 42 / 12%);
+  @media (hover: hover) {
+    button:enabled:hover {
+      filter: brightness(0.94);
+      translate: 0 -1px;
+      box-shadow: 0 3px 8px rgb(15 23 42 / 14%);
+    }
+  }
+
+  button:enabled:active {
+    translate: 0;
+    scale: 0.98;
+    box-shadow: none;
+  }
+
+  button:focus-visible {
+    outline: 2px solid var(--color-blue-600);
+    outline-offset: 2px;
   }
 
   button:disabled {
@@ -32,6 +48,12 @@
   @media (prefers-reduced-motion: reduce) {
     button {
       transition: none;
+    }
+
+    button:enabled:hover,
+    button:enabled:active {
+      translate: none;
+      scale: none;
     }
   }
 }

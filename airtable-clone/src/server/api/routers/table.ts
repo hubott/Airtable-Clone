@@ -1,9 +1,29 @@
+import { resourceName } from "../resource-name";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 
 export const tableRouter = createTRPCRouter({
+  createTable: protectedProcedure
+    .input(z.object({ baseId: z.string().min(1), name: resourceName }))
+    .mutation(async ({ ctx, input }) =>
+      ctx.db.$transaction(async (tx) => {
+        const bases = await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "Base" WHERE "id"=${input.baseId} AND "ownerId"=${ctx.session.user.id} FOR UPDATE
+    `;
+        if (!bases.length)
+          throw new TRPCError({ code: "NOT_FOUND", message: "Base not found" });
+        return tx.table.create({
+          data: {
+            baseId: input.baseId,
+            name: input.name,
+            columns: { create: { name: "Name", type: "TEXT", order: 0 } },
+            rows: { create: { order: 0 } },
+          },
+        });
+      }),
+    ),
   getTableWithColumns: protectedProcedure
     .input(z.object({ tableId: z.string() }))
     .query(async ({ ctx, input }) => {

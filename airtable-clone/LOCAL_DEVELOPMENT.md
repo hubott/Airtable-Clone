@@ -46,7 +46,7 @@ npm run db:migrate
 
 The script creates a PostgreSQL container using the database name, password and port from `DATABASE_URL`. A Homebrew PostgreSQL installation is another option; create the matching database/user before running migrations.
 
-A fresh database has no bases or tables. Sign in first to create your user, then create owned sample data using Prisma Studio (`npm run db:studio`) or a deliberate development-only fixture. The current UI can add rows to existing tables but cannot create tables yet. The existing seed script requires an existing table and adds 100,000 rows; it is not a fresh-database bootstrap and should not be run automatically.
+A fresh database has no bases or tables. Sign in to create your user, then choose **+ New base** on the dashboard. Enter a name and create it; the app opens the new base. Choose **+ New table** there to create your first table. It opens with a Text column named **Name** and one blank row, ready to edit. Both creation forms support Cancel, show pending/errors, and preserve drafts after failure. The existing seed script requires an existing table and adds 100,000 rows; it is not a fresh-database bootstrap and should not be run automatically.
 
 ## Start and use
 
@@ -69,6 +69,8 @@ Cell controls:
 - Select a cell and use Ctrl/Cmd+C to copy its value, or Ctrl/Cmd+V to paste and save one value immediately. Pasting invalid numeric input or a multi-cell spreadsheet range shows an error and preserves the old value. Empty text clears the cell.
 - Copy/paste inside the editor retains normal text selection behavior; press Enter or Tab to save afterward.
 - Saving is optimistic. Failed writes restore that cell's previous value and show an error above the grid; edit again to retry.
+
+Use **← Back to dashboard** from a base and **← Back to base** from a table to navigate upward.
 
 Row controls:
 
