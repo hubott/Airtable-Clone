@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import InfoTooltip from "~/app/_components/InfoTooltip";
 import LoadingSpinner from "~/app/_components/LoadingSpinner";
 import { api } from "~/trpc/react";
@@ -303,6 +304,13 @@ export default function TablePage() {
   /* ---------------- RENDER ---------------- */
   return (
     <div>
+      <Link
+        href={`/dashboard/base/${table.baseId}`}
+        className="mb-3 inline-flex items-center gap-2 rounded text-sm font-medium text-slate-600 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+      >
+        <span aria-hidden="true">←</span>
+        Back to base
+      </Link>
       <div className="mb-2 flex items-center gap-2">
         <h1 className="text-xl font-semibold">{table.name}</h1>
         <InfoTooltip label="Table editing tips">
