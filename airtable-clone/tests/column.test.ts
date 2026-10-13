@@ -109,3 +109,86 @@ void test("rejects empty and oversized names before database access", async () =
     });
   assert.deepEqual(events, []);
 });
+
+function renameSetup(
+  options: { owned?: boolean; authenticated?: boolean } = {},
+) {
+  let writes = 0;
+  const database = {
+    column: {
+      updateManyAndReturn: async (args: {
+        where: { id: string; table: { base: { ownerId: string } } };
+        data: { name: string };
+      }) => {
+        assert.equal(args.where.id, "column");
+        assert.equal(args.where.table.base.ownerId, "owner");
+        if (options.owned === false) return [];
+        writes++;
+        return [
+          {
+            id: "column",
+            tableId: "table",
+            type: "NUMBER",
+            order: 3,
+            name: args.data.name,
+          },
+        ];
+      },
+    },
+  };
+  const caller = appRouter.createCaller({
+    db: database as unknown as PrismaClient,
+    headers: new Headers(),
+    session:
+      options.authenticated === false
+        ? null
+        : { user: { id: "owner" }, expires: "2099-01-01" },
+  });
+  return { caller, getWrites: () => writes };
+}
+void test("rename requires authentication and scopes the write to the owner", async () => {
+  const anonymous = renameSetup({ authenticated: false });
+  await assert.rejects(
+    anonymous.caller.column.renameColumn({
+      columnId: "column",
+      name: "New name",
+    }),
+    { code: "UNAUTHORIZED" },
+  );
+  assert.equal(anonymous.getWrites(), 0);
+  const unowned = renameSetup({ owned: false });
+  await assert.rejects(
+    unowned.caller.column.renameColumn({
+      columnId: "column",
+      name: "New name",
+    }),
+    { code: "NOT_FOUND" },
+  );
+  assert.equal(unowned.getWrites(), 0);
+});
+void test("rename trims names while preserving column identity, type and order", async () => {
+  const { caller, getWrites } = renameSetup();
+  assert.deepEqual(
+    await caller.column.renameColumn({
+      columnId: "column",
+      name: "  Estimated hours  ",
+    }),
+    {
+      id: "column",
+      tableId: "table",
+      type: "NUMBER",
+      order: 3,
+      name: "Estimated hours",
+    },
+  );
+  assert.equal(getWrites(), 1);
+});
+void test("rename rejects invalid names before attempting a database update", async () => {
+  const { caller, getWrites } = renameSetup();
+  for (const name of ["", "  ", "a".repeat(101)])
+    await assert.rejects(
+      caller.column.renameColumn({ columnId: "column", name }),
+      { code: "BAD_REQUEST" },
+    );
+  assert.equal(getWrites(), 0);
+});

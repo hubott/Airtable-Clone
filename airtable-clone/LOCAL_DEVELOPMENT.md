@@ -83,7 +83,8 @@ Column controls:
 - **+ Add column** opens a form for a name (1–100 characters) and Text/Numbers only input type.
 - **Create column** appends the column to the right. Existing rows start with empty values, and cells are created when edited.
 - Failed creation preserves the form and shows an error. **Cancel** closes the form without creating a column.
-- No schema migration is required for column creation.
+- Click a column name (with its pencil icon) to rename it. Enter or **Save** persists the name; Escape or **Cancel** discards the draft. Failed saves keep the editor open and preserve the existing header name.
+- No schema migration is required for column creation or renaming.
 
 ## Verify
 

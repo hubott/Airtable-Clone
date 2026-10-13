@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import ColumnHeader from "~/app/_components/ColumnHeader";
 import AddColumnForm from "~/app/_components/AddColumnForm";
 import InfoTooltip from "~/app/_components/InfoTooltip";
 import LoadingSpinner from "~/app/_components/LoadingSpinner";
@@ -453,24 +454,14 @@ export default function TablePage() {
                 Row
               </th>
               {table.columns.map((col) => (
-                <th
+                <ColumnHeader
                   key={col.id}
-                  scope="col"
-                  title={
-                    col.type === "TEXT"
-                      ? "Accepts text, numbers, and symbols"
-                      : "Accepts numbers only"
-                  }
-                  className="border border-gray-300 px-2 py-1 text-left"
-                  style={{
-                    width: `calc((100% - 88px) / ${table.columns.length})`,
-                  }}
-                >
-                  <span>{col.name}</span>
-                  <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-normal text-gray-600">
-                    {col.type === "TEXT" ? "Text" : "Numbers only"}
-                  </span>
-                </th>
+                  columnId={col.id}
+                  tableId={tableId}
+                  name={col.name}
+                  type={col.type}
+                  width={`calc((100% - 88px) / ${table.columns.length})`}
+                />
               ))}
             </tr>
           </thead>

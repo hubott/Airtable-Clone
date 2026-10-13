@@ -2,16 +2,34 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 
+const columnName = z
+  .string()
+  .trim()
+  .min(1, "Enter a column name")
+  .max(100, "Use at most 100 characters");
+
 export const columnRouter = createTRPCRouter({
+  renameColumn: protectedProcedure
+    .input(z.object({ columnId: z.string().min(1), name: columnName }))
+    .mutation(async ({ ctx, input }) => {
+      // Apply authorization in the write itself, avoiding a check/write race.
+      const columns = await ctx.db.column.updateManyAndReturn({
+        where: {
+          id: input.columnId,
+          table: { base: { ownerId: ctx.session.user.id } },
+        },
+        data: { name: input.name },
+      });
+      const column = columns[0];
+      if (!column)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Column not found" });
+      return column;
+    }),
   createColumn: protectedProcedure
     .input(
       z.object({
         tableId: z.string().min(1),
-        name: z
-          .string()
-          .trim()
-          .min(1, "Enter a column name")
-          .max(100, "Use at most 100 characters"),
+        name: columnName,
         type: z.enum(["TEXT", "NUMBER"]),
       }),
     )
