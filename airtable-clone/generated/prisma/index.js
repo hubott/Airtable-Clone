@@ -217,7 +217,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "/Users/hwthomas/Desktop/Lyra/Airtable-Clone/airtable-clone/generated/prisma",
+      "value": "/Users/hwthomas/Desktop/Portfolio Projects/Airtable/Airtable-Clone/airtable-clone/generated/prisma",
       "fromEnvVar": null
     },
     "config": {
@@ -231,7 +231,7 @@ const config = {
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "/Users/hwthomas/Desktop/Lyra/Airtable-Clone/airtable-clone/prisma/schema.prisma",
+    "sourceFilePath": "/Users/hwthomas/Desktop/Portfolio Projects/Airtable/Airtable-Clone/airtable-clone/prisma/schema.prisma",
     "isCustomOutput": true
   },
   "relativeEnvPaths": {
@@ -245,6 +245,7 @@ const config = {
     "db"
   ],
   "activeProvider": "postgresql",
+  "postinstall": false,
   "inlineDatasources": {
     "db": {
       "url": {
