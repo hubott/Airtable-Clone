@@ -25,10 +25,13 @@ export const cellRouter = createTRPCRouter({
         if (!row)
           throw new TRPCError({ code: "NOT_FOUND", message: "Row not found" });
 
-        const column = await tx.column.findFirst({
-          where: { id: input.columnId, tableId: row.tableId },
-          select: { type: true },
-        });
+        // Shared locks permit parallel saves while excluding type conversion/deletion.
+        const columns = await tx.$queryRaw<{ type: "TEXT" | "NUMBER" }[]>`
+          SELECT "type" FROM "Column"
+          WHERE "id"=${input.columnId} AND "tableId"=${row.tableId}
+          FOR SHARE
+        `;
+        const column = columns[0];
         if (!column)
           throw new TRPCError({
             code: "NOT_FOUND",

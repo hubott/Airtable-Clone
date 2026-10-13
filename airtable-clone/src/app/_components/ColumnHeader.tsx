@@ -15,6 +15,7 @@ export default function ColumnHeader({
   type,
   width,
   onDelete,
+  onChangeType,
   deleteDisabled = false,
 }: {
   columnId: string;
@@ -23,6 +24,7 @@ export default function ColumnHeader({
   type: "TEXT" | "NUMBER";
   width: string;
   onDelete: () => void;
+  onChangeType: () => void;
   deleteDisabled?: boolean;
 }) {
   const utils = api.useUtils();
@@ -149,7 +151,11 @@ export default function ColumnHeader({
           </span>
         </button>
       )}
-      <span
+      <button
+        type="button"
+        aria-label={`Change type of column ${name}`}
+        disabled={deleteDisabled || mutation.isPending}
+        onClick={onChangeType}
         title={
           type === "TEXT"
             ? "Accepts text, numbers, and symbols"
@@ -158,7 +164,7 @@ export default function ColumnHeader({
         className="ml-2 inline-block rounded bg-gray-100 px-1.5 py-0.5 text-xs font-normal text-gray-600"
       >
         {type === "TEXT" ? "Text" : "Numbers only"}
-      </span>
+      </button>
       {!editing && (
         <button
           type="button"

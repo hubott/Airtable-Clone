@@ -1,3 +1,4 @@
+import { scanColumnConversion } from "../column-conversion";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
@@ -9,6 +10,81 @@ const columnName = z
   .max(100, "Use at most 100 characters");
 
 export const columnRouter = createTRPCRouter({
+  previewTypeChange: protectedProcedure
+    .input(
+      z.object({
+        columnId: z.string().min(1),
+        type: z.enum(["TEXT", "NUMBER"]),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const column = await ctx.db.column.findFirst({
+        where: {
+          id: input.columnId,
+          table: { base: { ownerId: ctx.session.user.id } },
+        },
+      });
+      if (!column)
+        throw new TRPCError({ code: "NOT_FOUND", message: "Column not found" });
+      return {
+        fromType: column.type,
+        toType: input.type,
+        ...(await scanColumnConversion(
+          ctx.db,
+          column.id,
+          column.type,
+          input.type,
+        )),
+      };
+    }),
+  changeType: protectedProcedure
+    .input(
+      z.object({
+        columnId: z.string().min(1),
+        fromType: z.enum(["TEXT", "NUMBER"]),
+        type: z.enum(["TEXT", "NUMBER"]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) =>
+      ctx.db.$transaction(
+        async (tx) => {
+          const columns = await tx.$queryRaw<
+            { id: string; type: "TEXT" | "NUMBER" }[]
+          >`
+        SELECT c."id", c."type" FROM "Column" c
+        JOIN "Table" t ON t."id"=c."tableId"
+        JOIN "Base" b ON b."id"=t."baseId"
+        WHERE c."id"=${input.columnId} AND b."ownerId"=${ctx.session.user.id}
+        FOR UPDATE OF c
+      `;
+          const column = columns[0];
+          if (!column)
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Column not found",
+            });
+          if (column.type !== input.fromType)
+            throw new TRPCError({
+              code: "CONFLICT",
+              message:
+                "The column type changed. Refresh the preview and try again.",
+            });
+          if (column.type !== input.type)
+            await scanColumnConversion(
+              tx,
+              column.id,
+              column.type,
+              input.type,
+              true,
+            );
+          return tx.column.update({
+            where: { id: column.id },
+            data: { type: input.type },
+          });
+        },
+        { timeout: 120000 },
+      ),
+    ),
   deleteColumn: protectedProcedure
     .input(z.object({ columnId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) =>

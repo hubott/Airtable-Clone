@@ -26,13 +26,17 @@ function setup(
         return options.owned === false ? null : { tableId: "table" };
       },
     },
-    column: {
-      findFirst: async (args: { where: { id: string; tableId: string } }) => {
-        assert.equal(args.where.tableId, "table");
-        return options.sameTable === false
-          ? null
-          : { type: options.type ?? "TEXT" };
-      },
+    $queryRaw: async (
+      sql: TemplateStringsArray,
+      columnId: string,
+      tableId: string,
+    ) => {
+      assert.equal(columnId, "column");
+      assert.equal(tableId, "table");
+      assert.match(sql.join("?"), /FOR SHARE/);
+      return options.sameTable === false
+        ? []
+        : [{ type: options.type ?? "TEXT" }];
     },
     cell: {
       upsert: async (args: {
