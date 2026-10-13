@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import InfoTooltip from "~/app/_components/InfoTooltip";
 import LoadingSpinner from "~/app/_components/LoadingSpinner";
 import { api } from "~/trpc/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -302,13 +303,23 @@ export default function TablePage() {
   /* ---------------- RENDER ---------------- */
   return (
     <div>
-      <h1 className="mb-2 text-xl font-semibold">{table.name}</h1>
-      <p className="mb-2 text-sm text-gray-600">
-        Click to select. Double-click or press Enter to edit. Enter saves;
-        Escape or clicking away cancels. Arrows move between cells;
-        Tab/Shift+Tab move forward/back and save while editing. Ctrl/Cmd+C
-        copies a selected cell; Ctrl/Cmd+V pastes and saves one value.
-      </p>
+      <div className="mb-2 flex items-center gap-2">
+        <h1 className="text-xl font-semibold">{table.name}</h1>
+        <InfoTooltip label="Table editing tips">
+          <p>
+            Click to select. Double-click or Enter to edit. Enter saves; Escape
+            or clicking away cancels.
+          </p>
+          <p>
+            Arrows move between cells. Tab/Shift+Tab move forward/back and save
+            while editing.
+          </p>
+          <p>
+            Ctrl/Cmd+C copies a selected cell. Ctrl/Cmd+V pastes and saves one
+            value.
+          </p>
+        </InfoTooltip>
+      </div>
       <p
         role="status"
         aria-live="polite"
@@ -358,9 +369,13 @@ export default function TablePage() {
         >
           {rowBusy ? "Updating rows…" : "+ Add row"}
         </button>
-        <span className="text-sm text-gray-600">
-          New rows appear at the top.
-        </span>
+        <InfoTooltip label="Row management tips">
+          <p>
+            New rows appear at the top. Use × beside a row number to delete it
+            after confirmation.
+          </p>
+          <p>Finish pending cell saves before adding or deleting rows.</p>
+        </InfoTooltip>
       </div>
       {rowError && (
         <p role="alert" className="mb-2 text-sm text-red-700">
