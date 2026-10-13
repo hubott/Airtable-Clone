@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useRef, useState } from "react";
+import { readSingleCellClipboard } from "~/utils/cell-clipboard";
 import type { CellDirection } from "~/utils/cell-navigation";
 import { parseCellValue } from "~/utils/cell-value";
 
@@ -61,15 +62,15 @@ export const EditableCell = memo(function EditableCell({
     cellRef.current?.focus();
   }
 
-  async function save(direction?: CellDirection) {
+  async function save(direction?: CellDirection, nextValue = draft) {
     if (savingRef.current || disabled) return;
     try {
-      parseCellValue(type, draft);
+      parseCellValue(type, nextValue);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Invalid value");
       return;
     }
-    if (draft === String(value ?? "")) {
+    if (nextValue === String(value ?? "")) {
       cancel();
       if (direction) onNavigate?.(rowId, columnId, direction);
       return;
@@ -79,7 +80,7 @@ export const EditableCell = memo(function EditableCell({
     setEditing(false);
     cellRef.current?.focus();
     try {
-      await onSave(rowId, columnId, type, draft);
+      await onSave(rowId, columnId, type, nextValue);
       setError(null);
       if (direction && document.activeElement === cellRef.current)
         onNavigate?.(rowId, columnId, direction);
@@ -112,6 +113,36 @@ export const EditableCell = memo(function EditableCell({
         if (!editing) cellRef.current?.focus();
       }}
       onDoubleClick={startEditing}
+      onCopy={(event) => {
+        if (editing || document.activeElement !== cellRef.current) return;
+        event.preventDefault();
+        event.clipboardData.setData("text/plain", String(value ?? ""));
+      }}
+      onPaste={(event) => {
+        if (editing || document.activeElement !== cellRef.current) return;
+        event.preventDefault();
+        if (disabled || savingRef.current) {
+          setError(
+            "Wait for the current save or row operation to finish before pasting.",
+          );
+          return;
+        }
+        if (!event.clipboardData.types.includes("text/plain")) {
+          setError("Paste a text or numeric value.");
+          return;
+        }
+        try {
+          const pastedValue = readSingleCellClipboard(
+            event.clipboardData.getData("text/plain"),
+          );
+          setError(null);
+          void save(undefined, pastedValue);
+        } catch (cause) {
+          setError(
+            cause instanceof Error ? cause.message : "Could not paste value",
+          );
+        }
+      }}
       onKeyDown={(event) => {
         if (
           disabled ||
@@ -182,7 +213,7 @@ export const EditableCell = memo(function EditableCell({
       ) : (
         <div className="truncate">{value ?? ""}</div>
       )}
-      {editing && error && (
+      {error && (
         <span
           role="alert"
           className="absolute top-full left-0 z-30 rounded bg-red-700 px-2 py-1 text-xs text-white"

@@ -32,6 +32,7 @@ The application lives in `airtable-clone/` relative to this file. Run npm, Prism
 - Reject invalid and nonfinite numbers. Decimal and scientific notation are supported; hex, comma-separated values, NaN and Infinity are rejected.
 - Keep drafts local to cells to limit rerenders. Preserve references for unchanged cached rows/pages. Prevent overlapping saves to the same cell and keep errors visible after virtualization unmounts a cell.
 - Provide loading, empty, validation and failure feedback and accessible keyboard controls. Click focuses/selects; double-click or Enter edits; Enter saves; Escape or clicking away cancels an unsaved draft. Arrows navigate selected cells; Tab/Shift+Tab wrap between rows, and save before moving when editing. Input arrow keys retain normal caret behavior. Page-level navigation scrolls/focuses virtualized rows and fetches the next page when needed.
+- Selected cells support Ctrl/Cmd+C and Ctrl/Cmd+V through native clipboard events. Pasting saves one value through the existing cell mutation; invalid numbers and multi-cell clipboard ranges are rejected. Native clipboard behavior is preserved inside the editor. `src/utils/cell-clipboard.ts` accepts a single spreadsheet cell with one terminating newline.
 - Never print secrets or commit local env files. Do not bypass authentication to make local development easier. Do not migrate or seed a deployed database as part of local setup.
 
 ## Verification and local development
@@ -53,7 +54,7 @@ From the application directory:
 ## Development priorities
 
 1. Complete editable TEXT/NUMBER cells: safe saves, validation, clearing values, optimistic updates, rollback, keyboard interaction and responsive rendering. Verify in a real authenticated browser with a development database.
-2. Row creation/deletion and stable ordering are implemented. Arrow and Tab keyboard navigation are implemented, including virtualized rows and loading the next page. Next within row management: practical copy/paste.
+2. Row creation/deletion and stable ordering are implemented. Arrow and Tab keyboard navigation are implemented, including virtualized rows and loading the next page. Single-cell copy/paste is implemented. The next phase is column management; multi-cell range selection and paste remain in the advanced spreadsheet phase.
 3. Column creation/rename/delete, safe type changes and reordering; additional types later.
 4. Base/table creation, rename/delete and navigation improvements.
 5. Sorting, filtering, search, resizing, range selection and copy/paste; validate large-dataset performance.

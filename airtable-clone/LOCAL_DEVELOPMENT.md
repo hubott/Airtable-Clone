@@ -66,6 +66,8 @@ Cell controls:
 - While editing, Tab/Shift+Tab save before moving. Invalid values stay in the editor; failed saves restore the old value and keep focus on the original cell. Arrow keys move the text cursor normally.
 - Navigation scrolls offscreen rows into view and fetches the next page when needed. After editing the first/last cell with Tab, press Tab again to resume normal browser focus navigation if there is no adjacent cell.
 - Empty text or whitespace-only numeric input clears the cell. Invalid numbers stay in the editor with an error.
+- Select a cell and use Ctrl/Cmd+C to copy its value, or Ctrl/Cmd+V to paste and save one value immediately. Pasting invalid numeric input or a multi-cell spreadsheet range shows an error and preserves the old value. Empty text clears the cell.
+- Copy/paste inside the editor retains normal text selection behavior; press Enter or Tab to save afterward.
 - Saving is optimistic. Failed writes restore that cell's previous value and show an error above the grid; edit again to retry.
 
 Row controls:

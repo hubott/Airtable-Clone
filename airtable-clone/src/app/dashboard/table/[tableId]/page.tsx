@@ -304,7 +304,8 @@ export default function TablePage() {
       <p className="mb-2 text-sm text-gray-600">
         Click to select. Double-click or press Enter to edit. Enter saves;
         Escape or clicking away cancels. Arrows move between cells;
-        Tab/Shift+Tab move forward/back and save while editing.
+        Tab/Shift+Tab move forward/back and save while editing. Ctrl/Cmd+C
+        copies a selected cell; Ctrl/Cmd+V pastes and saves one value.
       </p>
       <p role="status" className="mb-2 min-h-5 text-sm text-gray-600">
         {pendingCount > 0
