@@ -69,6 +69,131 @@ void test(
         } while (cursor);
         return ids;
       };
+      const searchedPage = (
+        search: string | undefined,
+        cursor?: RowCursor | null,
+        sort?: { columnId: string; direction: "asc" | "desc" },
+        filter?: RowFilter,
+        take = 1,
+      ) =>
+        db.$transaction(
+          (tx) =>
+            getViewRows(tx, {
+              tableId: "table",
+              ownerId: "owner",
+              search,
+              cursor,
+              sort,
+              filter,
+              take,
+            }),
+          { isolationLevel: "RepeatableRead" },
+        );
+      const searchedIds = async (
+        search: string | undefined,
+        sort?: { columnId: string; direction: "asc" | "desc" },
+        filter?: RowFilter,
+      ) => {
+        const ids: string[] = [];
+        let cursor: RowCursor | null | undefined;
+        do {
+          const result = await searchedPage(search, cursor, sort, filter);
+          ids.push(...result.rows.map((row) => row.id));
+          cursor = result.nextCursor;
+        } while (cursor);
+        return ids;
+      };
+      await t.test(
+        "search spans text columns once per row and combines with filtering and both sort directions",
+        async () => {
+          await db.$executeRaw`INSERT INTO "Column" VALUES ('alias', 'table', 'TEXT')`;
+          await db.$executeRaw`INSERT INTO "Cell" VALUES ('alias-a', 'a', 'alias', 'alpha alias', NULL), ('alias-b', 'b', 'alias', 'ALPHA alias', NULL)`;
+          assert.deepEqual(await searchedIds("  ALPHA  "), [
+            "a",
+            "b",
+            "c",
+            "d",
+          ]);
+          assert.deepEqual(
+            await searchedIds("Alpha", {
+              columnId: "number",
+              direction: "desc",
+            }),
+            ["a", "d", "c", "b"],
+          );
+          assert.deepEqual(
+            await searchedIds(
+              "Alpha",
+              { columnId: "number", direction: "asc" },
+              { columnId: "number", type: "NUMBER", operator: "gte", value: 0 },
+            ),
+            ["c", "a", "d"],
+          );
+          assert.deepEqual(await searchedIds("missing"), []);
+          assert.deepEqual(await searchedIds("  "), [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+          ]);
+          await db.$executeRaw`DELETE FROM "Cell" WHERE "columnId" = 'alias'`;
+          await db.$executeRaw`DELETE FROM "Column" WHERE "id" = 'alias'`;
+        },
+      );
+      await t.test(
+        "numeric search matches values exactly, including zero, negatives and scientific notation",
+        async () => {
+          assert.deepEqual(await searchedIds("10"), ["a", "d"]);
+          assert.deepEqual(await searchedIds("1e1"), ["a", "d"]);
+          assert.deepEqual(await searchedIds("0010"), ["a", "d"]);
+          assert.deepEqual(await searchedIds("0"), ["c"]);
+          assert.deepEqual(await searchedIds("-2"), ["b"]);
+          assert.deepEqual(await searchedIds("1"), []);
+          assert.deepEqual(await searchedIds(">5"), []);
+        },
+      );
+      await t.test(
+        "search treats wildcard/quoted text literally and ignores inactive fields and cross-table columns",
+        async () => {
+          const literal = "%_\\'; SELECT 1; --";
+          await db.$executeRaw`UPDATE "Cell" SET "textValue" = ${literal} WHERE "id" = 'ta'`;
+          assert.deepEqual(await searchedIds(literal), ["a"]);
+          assert.deepEqual(await searchedIds("%_"), ["a"]);
+          await db.$executeRaw`UPDATE "Cell" SET "textValue" = 'Beta' WHERE "id" = 'ta'`;
+          await db.$executeRaw`UPDATE "Cell" SET "numberValue" = 99 WHERE "id" = 'te'`;
+          await db.$executeRaw`INSERT INTO "Cell" VALUES ('foreign', 'f', 'other', 'foreign secret', NULL)`;
+          assert.deepEqual(await searchedIds("99"), []);
+          assert.deepEqual(await searchedIds("foreign secret"), []);
+          await db.$executeRaw`DELETE FROM "Cell" WHERE "id" = 'foreign'`;
+          await db.$executeRaw`UPDATE "Cell" SET "numberValue" = NULL WHERE "id" = 'te'`;
+        },
+      );
+      await t.test(
+        "changed search cursors are rejected and fresh searches reflect edits",
+        async () => {
+          const first = await searchedPage("alpha");
+          await assert.rejects(searchedPage("Beta", first.nextCursor), {
+            code: "BAD_REQUEST",
+          });
+          await assert.rejects(searchedPage(undefined, first.nextCursor), {
+            code: "BAD_REQUEST",
+          });
+          const otherOwner = await db.$transaction((tx) =>
+            getViewRows(tx, {
+              tableId: "table",
+              ownerId: "other-owner",
+              search: "Alpha",
+              take: 2,
+            }),
+          );
+          assert.deepEqual(otherOwner.rows, []);
+          await db.$executeRaw`UPDATE "Cell" SET "textValue" = 'Gone' WHERE "id" = 'tb'`;
+          assert.deepEqual(await searchedIds("alpha"), ["c", "d"]);
+          await db.$executeRaw`UPDATE "Cell" SET "textValue" = 'Alpha' WHERE "id" = 'tb'`;
+        },
+      );
       const filteredPage = (
         filter: RowFilter,
         cursor?: RowCursor | null,
@@ -280,11 +405,16 @@ void test(
         "deleted cursor rows still advance at the recorded value boundary",
         async () => {
           const first = await page("text", "asc", null, 1);
+          const firstSearched = await searchedPage("alpha");
           const firstFiltered = await filteredPage(
             textFilter("contains", "alp"),
           );
           await db.$executeRaw`DELETE FROM "Cell" WHERE "rowId" = 'b'`;
           await db.$executeRaw`DELETE FROM "Row" WHERE "id" = 'b'`;
+          assert.equal(
+            (await searchedPage("alpha", firstSearched.nextCursor)).rows[0]?.id,
+            "c",
+          );
           assert.equal(
             (
               await filteredPage(
@@ -342,6 +472,7 @@ void test(
         async () => {
           await db.$executeRaw`INSERT INTO "Row" SELECT 'large-' || i, 'table', i FROM generate_series(1, 100000) i`;
           await db.$executeRaw`INSERT INTO "Cell" SELECT 'large-cell-' || i, 'large-' || i, 'number', NULL, (i % 1000)::double precision FROM generate_series(1, 100000) i`;
+          await db.$executeRaw`INSERT INTO "Cell" SELECT 'large-text-' || i, 'large-' || i, 'text', 'Record ' || i, NULL FROM generate_series(1, 100000) i`;
           await db.$executeRawUnsafe('ANALYZE "Row"');
           await db.$executeRawUnsafe('ANALYZE "Cell"');
           const start = performance.now();
@@ -349,6 +480,38 @@ void test(
           const middle = performance.now();
           const next = await page("number", "asc", first.nextCursor, 200);
           const end = performance.now();
+          const searchStart = performance.now();
+          const searchFilter: RowFilter = {
+            columnId: "number",
+            type: "NUMBER",
+            operator: "gte",
+            value: 500,
+          };
+          const searchSort = { columnId: "number", direction: "asc" as const };
+          const firstSearch = await searchedPage(
+            "Record 9",
+            undefined,
+            searchSort,
+            searchFilter,
+            200,
+          );
+          const nextSearch = await searchedPage(
+            "Record 9",
+            firstSearch.nextCursor,
+            searchSort,
+            searchFilter,
+            200,
+          );
+          assert.equal(firstSearch.rows.length, 200);
+          assert.equal(
+            new Set(
+              [...firstSearch.rows, ...nextSearch.rows].map((row) => row.id),
+            ).size,
+            400,
+          );
+          t.diagnostic(
+            `100k rows: two searched/filtered/sorted pages ${(performance.now() - searchStart).toFixed(1)}ms total`,
+          );
           const filteredStart = performance.now();
           const firstFiltered = await filteredPage(
             numberFilter("gte", 500),

@@ -195,3 +195,41 @@ void test("filtered reads reject changed filters, stale types and invalid operat
   );
   assert.equal(events.includes("sort"), false);
 });
+
+void test("search-only reads require authentication and table ownership", async () => {
+  for (const options of [{ authenticated: false }, { owned: false }]) {
+    const { caller, events } = setup(options);
+    await assert.rejects(
+      caller.row.getRows({ tableId: "table", search: "Alpha" }),
+      { code: options.authenticated === false ? "UNAUTHORIZED" : "NOT_FOUND" },
+    );
+    assert.equal(events.includes("sort"), false);
+  }
+  const { caller } = setup();
+  const result = await caller.row.getRows({
+    tableId: "table",
+    take: 2,
+    search: "  Alpha  ",
+  });
+  assert.deepEqual(result.nextCursor, {
+    id: "first",
+    order: 1,
+    search: "Alpha",
+  });
+});
+void test("search changes reject stale cursors and oversized terms before SQL execution", async () => {
+  for (const attempt of [
+    { tableId: "table", search: "Alpha", cursor: { id: "deleted", order: 0 } },
+    {
+      tableId: "table",
+      search: "Alpha",
+      cursor: { id: "deleted", order: 0, search: "Beta" },
+    },
+    { tableId: "table", cursor: { id: "deleted", order: 0, search: "Alpha" } },
+    { tableId: "table", search: "x".repeat(201) },
+  ]) {
+    const { caller, events } = setup();
+    await assert.rejects(caller.row.getRows(attempt), { code: "BAD_REQUEST" });
+    assert.equal(events.includes("sort"), false);
+  }
+});

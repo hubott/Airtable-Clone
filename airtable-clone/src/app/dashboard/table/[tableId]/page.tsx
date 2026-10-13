@@ -9,6 +9,7 @@ import InfoTooltip from "~/app/_components/InfoTooltip";
 import DeleteResourceButton from "~/app/_components/DeleteResourceButton";
 import ResourceNameEditor from "~/app/_components/ResourceNameEditor";
 import LoadingSpinner from "~/app/_components/LoadingSpinner";
+import RowSearchControls from "~/app/_components/RowSearchControls";
 import RowFilterControls from "~/app/_components/RowFilterControls";
 import { rowFilterKey } from "~/utils/row-filter";
 import RowSortControls from "~/app/_components/RowSortControls";
@@ -29,7 +30,10 @@ import {
   type CellValue,
 } from "~/utils/cell-cache";
 
-type RowView = Pick<RouterInputs["row"]["getRows"], "sort" | "filter">;
+type RowView = Pick<
+  RouterInputs["row"]["getRows"],
+  "sort" | "filter" | "search"
+>;
 const EMPTY_VIEW: RowView = {};
 const COLUMN_WIDTH = 240;
 const ROW_CONTROL_WIDTH = 88;
@@ -44,7 +48,7 @@ export default function TablePage() {
   }>();
   const view =
     viewSelection?.tableId === tableId ? viewSelection.view : EMPTY_VIEW;
-  const { sort, filter } = view;
+  const { sort, filter, search } = view;
   const rowQuery = useMemo(
     () => ({ tableId, take: 200, ...view }),
     [tableId, view],
@@ -135,7 +139,11 @@ export default function TablePage() {
           replaceCachedCell(data, rowId, columnId, saved),
         );
         // Defer reordering until every optimistic save has settled.
-        if (sort?.columnId === columnId || filter?.columnId === columnId)
+        if (
+          search ||
+          sort?.columnId === columnId ||
+          filter?.columnId === columnId
+        )
           viewRefreshNeeded.current = true;
         await utils.row.getRows.invalidate(
           { tableId: rowQuery.tableId },
@@ -173,7 +181,7 @@ export default function TablePage() {
         }
       }
     },
-    [rowQuery, sort, filter, utils, mutateAsync, resetRows],
+    [rowQuery, sort, filter, search, utils, mutateAsync, resetRows],
   );
 
   async function changeView(nextView: RowView) {
@@ -223,7 +231,7 @@ export default function TablePage() {
       if (action === "create") {
         const createdRows = await createRows({ tableId, count });
         committed = true;
-        if (sort || filter) await resetRows(query);
+        if (sort || filter || search) await resetRows(query);
         else
           utils.row.getRows.setInfiniteData(query, (data) =>
             prependCachedRows(data, createdRows),
@@ -280,8 +288,13 @@ export default function TablePage() {
           : table,
       );
       setColumnDeleteTarget(null);
-      if (sort?.columnId === columnId || filter?.columnId === columnId) {
+      if (
+        search ||
+        sort?.columnId === columnId ||
+        filter?.columnId === columnId
+      ) {
         const nextView = {
+          ...(search ? { search } : {}),
           ...(sort && sort.columnId !== columnId ? { sort } : {}),
           ...(filter && filter.columnId !== columnId ? { filter } : {}),
         };
@@ -341,7 +354,7 @@ export default function TablePage() {
       setFocusTarget(null);
       parentRef.current?.scrollTo({ top: 0 });
       await utils.row.getRows.invalidate({ tableId }, { refetchType: "none" });
-      const nextView = filter?.columnId === column.id ? { sort } : view;
+      const nextView = filter?.columnId === column.id ? { sort, search } : view;
       setViewSelection({ tableId, view: nextView });
       await resetRows({ tableId, take: 200, ...nextView });
     } catch (cause) {
@@ -442,7 +455,7 @@ export default function TablePage() {
       if (
         rowOperation.current ||
         !table ||
-        ((sort || filter) && pendingCells.current.size)
+        ((sort || filter || search) && pendingCells.current.size)
       )
         return false;
       const destination = getCellDestination(
@@ -480,7 +493,7 @@ export default function TablePage() {
       }
       return true;
     },
-    [rows, table, sort, filter, hasNextPage, fetchNextPage],
+    [rows, table, sort, filter, search, hasNextPage, fetchNextPage],
   );
 
   useEffect(() => {
@@ -713,12 +726,20 @@ export default function TablePage() {
         <InfoTooltip label="Row management tips">
           <p>
             New rows follow the selected sort, or appear at the top in default
-            order. A filter may hide new blank rows. Use the trash icon beside a
-            row number to delete it after confirmation.
+            order. A filter or search may hide new blank rows. Use the trash
+            icon beside a row number to delete it after confirmation.
           </p>
           <p>Finish pending cell saves before adding or deleting rows.</p>
         </InfoTooltip>
       </form>
+      <RowSearchControls
+        key={`${tableId}:${search ?? ""}`}
+        search={search}
+        disabled={rowBusy || columnBusy || tableDeleting || pendingCount > 0}
+        onChange={(nextSearch) =>
+          void changeView({ ...view, search: nextSearch })
+        }
+      />
       <RowSortControls
         columns={table.columns}
         sort={sort}
@@ -926,8 +947,8 @@ export default function TablePage() {
       )}
       {!rows.length && !rowsError && (
         <p className="mb-2 text-sm text-gray-600">
-          {filter
-            ? "No rows match this filter. Change or clear it to see more rows."
+          {filter || search
+            ? "No rows match your search and filter settings. Change or clear them to see more rows."
             : "This table has no rows yet. Add a row to start entering data."}
         </p>
       )}

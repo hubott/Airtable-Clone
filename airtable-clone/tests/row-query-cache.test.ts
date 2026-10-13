@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { QueryClient, InfiniteQueryObserver } from "@tanstack/react-query";
+import type { RouterInputs } from "../src/trpc/react";
 import { getQueryKey } from "@trpc/react-query";
 process.env.SKIP_ENV_VALIDATION = "1";
 Object.assign(process.env, { NODE_ENV: "test" });
 const { api } = await import("../src/trpc/react");
 const { resetRowView } = await import("../src/utils/row-query-cache");
 
-void test("resetting the default view does not refetch cached sorted or filtered views", async () => {
+void test("resetting the default view does not refetch cached sorted, filtered or searched views", async () => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  const inputs = [
+  const inputs: RouterInputs["row"]["getRows"][] = [
     { tableId: "table", take: 200 },
     {
       tableId: "table",
@@ -28,7 +29,8 @@ void test("resetting the default view does not refetch cached sorted or filtered
       },
     },
   ];
-  const counts = [0, 0, 0];
+  inputs.push({ tableId: "table", take: 200, search: "Alpha" });
+  const counts = [0, 0, 0, 0];
   const unsubscribe: (() => void)[] = [];
   try {
     for (const [index, input] of inputs.entries()) {
@@ -46,7 +48,7 @@ void test("resetting the default view does not refetch cached sorted or filtered
       unsubscribe.push(observer.subscribe(() => undefined));
     }
     await resetRowView(client, inputs[0] ?? { tableId: "table", take: 200 });
-    assert.deepEqual(counts, [2, 1, 1]);
+    assert.deepEqual(counts, [2, 1, 1, 1]);
   } finally {
     unsubscribe.forEach((stop) => stop());
     client.clear();

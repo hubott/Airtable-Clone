@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { rowSearchSchema } from "~/utils/row-search";
 import { rowFilterSchema } from "~/utils/row-filter";
 import type { Prisma } from "~/../generated/prisma";
 import {
@@ -111,6 +112,7 @@ export const rowRouter = createTRPCRouter({
         cursor: rowCursorSchema.nullish(),
         sort: rowSortSchema.optional(),
         filter: rowFilterSchema.optional(),
+        search: rowSearchSchema,
         take: z.number().int().min(1).max(1000).default(50),
       }),
     )
@@ -124,7 +126,8 @@ export const rowRouter = createTRPCRouter({
 
       if (
         (!input.sort && input.cursor?.sort) ||
-        (!input.filter && input.cursor?.filter)
+        (!input.filter && input.cursor?.filter) ||
+        (!input.search && input.cursor?.search)
       )
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -132,7 +135,7 @@ export const rowRouter = createTRPCRouter({
         });
       const sort = input.sort;
       const viewPage =
-        sort || input.filter
+        sort || input.filter || input.search
           ? await ctx.db.$transaction(
               (tx) =>
                 getViewRows(tx, {

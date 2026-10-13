@@ -6,6 +6,8 @@ import {
   rowFilterKey,
   type RowFilter,
 } from "~/utils/row-filter";
+import { rowSearchSchema } from "~/utils/row-search";
+import { rowSearchSql } from "./row-search";
 import { rowFilterSql } from "./row-filter";
 
 export const rowSortSchema = z.object({
@@ -16,6 +18,7 @@ export const rowCursorSchema = z.object({
   id: z.string().min(1),
   order: z.number().int(),
   filter: rowFilterSchema.optional(),
+  search: rowSearchSchema,
   sort: rowSortSchema
     .extend({
       type: z.enum(["TEXT", "NUMBER"]),
@@ -45,6 +48,7 @@ export async function getViewRows(
     take: number;
     sort?: z.infer<typeof rowSortSchema>;
     filter?: RowFilter;
+    search?: string;
     cursor?: RowCursor | null;
   },
 ) {
@@ -61,6 +65,12 @@ export async function getViewRows(
       throw new TRPCError({ code: "NOT_FOUND", message: "Column not found" });
     return column.type;
   }
+  const search = rowSearchSchema.parse(input.search);
+  if (input.cursor && rowSearchSchema.parse(input.cursor.search) !== search)
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Search changed. Reload rows from the beginning.",
+    });
   const sort = input.sort;
   const sortType = sort ? await ownedColumnType(sort.columnId) : undefined;
   if (
@@ -133,6 +143,7 @@ export async function getViewRows(
     ${sort ? Prisma.sql`LEFT JOIN "Cell" c ON c."rowId" = r."id" AND c."columnId" = ${sort.columnId}` : Prisma.empty}
     WHERE r."tableId" = ${input.tableId} AND b."ownerId" = ${input.ownerId}
     ${rowFilterSql(input.filter)}
+    ${rowSearchSql(search)}
     ${after}
     ORDER BY ${sort ? Prisma.sql`${value} ${direction} NULLS LAST,` : Prisma.empty} r."order" ASC, r."id" ASC
     LIMIT ${input.take}
@@ -157,6 +168,7 @@ export async function getViewRows(
               ? { sort: { ...sort, type: sortType, value: last.value } }
               : {}),
             ...(input.filter ? { filter: input.filter } : {}),
+            ...(search ? { search } : {}),
           }
         : null,
   };

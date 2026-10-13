@@ -131,6 +131,16 @@ Manually verify Text and Number conditions, missing/cleared cells, no matches, c
 
 The optional PostgreSQL test command above also verifies filtering, stale cursor contexts, literal comparisons, deleted cursor rows and filtered/sorted timing on 100,000 synthetic rows. It uses the same dedicated local test database and temporary schema.
 
+## Table search
+
+Enter a term in **Search table** and choose **Search** (or press Enter). Search finds rows with matching cell values anywhere in the current table, including unloaded rows. Text matching ignores case and uses literal substrings: `%`, `_`, quotes and backslashes are ordinary characters. A valid finite number also matches Number cells by exact numeric value, so `10`, `0010` and `1e1` match the number 10; `1` does not match the number 10. Terms such as `>5` are literal text searches, not comparison expressions; use a Number filter for comparisons.
+
+Leading/trailing whitespace is trimmed. Blank input or **Clear search** removes searching and retains the active filter and sort. Search terms are limited to 200 characters. Changes take effect only when submitted; typing does not issue requests. Search and filter both need to match the row. Each row appears once even if several cells match. Search is local to this view and resets on reload; it searches cell values, not column names or other tables.
+
+Changing the search refreshes from the top. Editing any cell while searching refreshes after pending saves settle, since a row may stop matching. Successful column deletion/conversion refreshes matching rows and retains the term; affected filters/sorts follow their normal clearing rules. New blank rows may be hidden by a search. Failed saves preserve previous values. Changes in another browser may move rows across page boundaries; reload to see the latest view.
+
+Manually verify text case differences, a match in another column, numeric zero/negative/scientific values, no matches, and searching alongside both a filter and sorting across pages. Edit a matching cell, delete/convert a matching column, add/delete rows, clear the search, and test failed saves and keyboard navigation. Use the optional PostgreSQL test command above to verify real search pagination, cursor deletion, table ownership, literal input, and timings with 100,000 synthetic rows.
+
 ## Verify
 
 ```sh
