@@ -39,9 +39,73 @@ const COLUMN_WIDTH = 240;
 const ROW_CONTROL_WIDTH = 88;
 
 export default function TablePage() {
+  const [columnSizing, setColumnSizing] = useState<{
+    tableId: string;
+    widths: Record<string, number>;
+  }>();
   const [tableDeleting, setTableDeleting] = useState(false);
   const params = useParams();
   const tableId = params.tableId as string;
+  const widthStorageKey = `airtable-clone:column-widths:${tableId}`;
+
+  useEffect(() => {
+    const widths: Record<string, number> = {};
+    try {
+      const stored: unknown = JSON.parse(
+        localStorage.getItem(widthStorageKey) ?? "{}",
+      );
+      if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+        for (const [id, width] of Object.entries(stored)) {
+          if (
+            typeof width === "number" &&
+            Number.isFinite(width) &&
+            width >= 160 &&
+            width <= 640
+          ) {
+            Object.defineProperty(widths, id, {
+              value: width,
+              enumerable: true,
+              configurable: true,
+              writable: true,
+            });
+          }
+        }
+      }
+    } catch {
+      // Missing or unavailable browser storage should not prevent resizing.
+    }
+    setColumnSizing({ tableId, widths });
+  }, [tableId, widthStorageKey]);
+
+  useEffect(() => {
+    // Do not overwrite saved widths before this table has been restored.
+    if (columnSizing?.tableId !== tableId) return;
+    try {
+      localStorage.setItem(
+        widthStorageKey,
+        JSON.stringify(columnSizing.widths),
+      );
+    } catch {
+      // Resizing still works when storage is blocked or full.
+    }
+  }, [columnSizing, tableId, widthStorageKey]);
+
+  const getColumnWidth = useCallback(
+    (columnId: string) =>
+      (columnSizing?.tableId === tableId
+        ? columnSizing.widths[columnId]
+        : undefined) ?? COLUMN_WIDTH,
+    [columnSizing, tableId],
+  );
+  const resizeColumn = (columnId: string, width: number) => {
+    setColumnSizing((current) => ({
+      tableId,
+      widths: {
+        ...(current?.tableId === tableId ? current.widths : {}),
+        [columnId]: width,
+      },
+    }));
+  };
   const [viewSelection, setViewSelection] = useState<{
     tableId: string;
     view: RowView;
@@ -510,9 +574,14 @@ export default function TablePage() {
         (column) => column.id === focusTarget.columnId,
       ) ?? -1;
     if (columnIndex >= 0) {
-      const left = ROW_CONTROL_WIDTH + columnIndex * COLUMN_WIDTH;
-      const right = left + COLUMN_WIDTH;
-      if (COLUMN_WIDTH > viewport.clientWidth - ROW_CONTROL_WIDTH)
+      const width = getColumnWidth(focusTarget.columnId);
+      const left =
+        ROW_CONTROL_WIDTH +
+        (table?.columns ?? [])
+          .slice(0, columnIndex)
+          .reduce((total, column) => total + getColumnWidth(column.id), 0);
+      const right = left + width;
+      if (width > viewport.clientWidth - ROW_CONTROL_WIDTH)
         viewport.scrollLeft = left - ROW_CONTROL_WIDTH;
       else if (left < viewport.scrollLeft + ROW_CONTROL_WIDTH)
         viewport.scrollLeft = left - ROW_CONTROL_WIDTH;
@@ -544,7 +613,15 @@ export default function TablePage() {
       cell.focus({ preventScroll: true });
       setFocusTarget(null);
     }
-  }, [focusTarget, rowBusy, rows, table, virtualItems, rowVirtualizer]);
+  }, [
+    focusTarget,
+    rowBusy,
+    rows,
+    table,
+    virtualItems,
+    rowVirtualizer,
+    getColumnWidth,
+  ]);
 
   /* ---------------- INFINITE SCROLL ---------------- */
   useEffect(() => {
@@ -633,6 +710,11 @@ export default function TablePage() {
           <p>
             Arrows move between cells. Tab/Shift+Tab move forward/back and save
             while editing.
+          </p>
+          <p>
+            Drag a column’s right edge to resize. Focus the resize handle and
+            use Left/Right arrows; Home resets its width. Widths last until you
+            reload.
           </p>
           <p>
             Ctrl/Cmd+C copies a selected cell. Ctrl/Cmd+V pastes and saves one
@@ -964,7 +1046,12 @@ export default function TablePage() {
         <table
           className="table-fixed border-collapse border border-gray-300"
           style={{
-            width: ROW_CONTROL_WIDTH + table.columns.length * COLUMN_WIDTH,
+            width:
+              ROW_CONTROL_WIDTH +
+              table.columns.reduce(
+                (total, column) => total + getColumnWidth(column.id),
+                0,
+              ),
           }}
         >
           <thead className="sticky top-0 z-30 bg-white">
@@ -979,6 +1066,7 @@ export default function TablePage() {
               {table.columns.map((col, columnIndex) => (
                 <ColumnHeader
                   key={col.id}
+                  onResize={(width) => resizeColumn(col.id, width)}
                   columnId={col.id}
                   canMoveLeft={columnIndex > 0}
                   canMoveRight={columnIndex < table.columns.length - 1}
@@ -1003,7 +1091,7 @@ export default function TablePage() {
                   tableId={tableId}
                   name={col.name}
                   type={col.type}
-                  width={`${COLUMN_WIDTH}px`}
+                  width={`${getColumnWidth(col.id)}px`}
                 />
               ))}
             </tr>
@@ -1087,7 +1175,7 @@ export default function TablePage() {
                             ? (cell?.textValue ?? null)
                             : (cell?.numberValue ?? null)
                         }
-                        width={`${COLUMN_WIDTH}px`}
+                        width={`${getColumnWidth(col.id)}px`}
                         disabled={rowBusy || columnBusy || tableDeleting}
                         onSave={saveCell}
                         onNavigate={navigateCell}
