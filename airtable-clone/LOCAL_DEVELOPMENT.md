@@ -66,7 +66,7 @@ Cell controls:
 - While editing, Tab/Shift+Tab save before moving. Invalid values stay in the editor; failed saves restore the old value and keep focus on the original cell. Arrow keys move the text cursor normally.
 - Navigation scrolls offscreen rows into view and fetches the next page when needed. After editing the first/last cell with Tab, press Tab again to resume normal browser focus navigation if there is no adjacent cell.
 - Empty text or whitespace-only numeric input clears the cell. Invalid numbers stay in the editor with an error.
-- Select a cell and use Ctrl/Cmd+C to copy its value, or Ctrl/Cmd+V to paste and save one value immediately. Pasting invalid numeric input or a multi-cell spreadsheet range shows an error and preserves the old value. Empty text clears the cell.
+- Shift-click or Shift+arrow keys to select a rectangular range. Ctrl/Cmd+C copies rows separated by newlines and columns separated by tabs. Ctrl/Cmd+V pastes from the focused cell into existing rows/columns, loading more destination rows if needed. Paste supports up to 1,000 cells/1 MB, including quoted tabs/newlines and blank cells. Invalid numbers, malformed ranges and destinations beyond the table are rejected. Valid paste appears optimistically, then reconciles with the atomic server save; failed saves restore only affected cells. Finish the save before making further edits.
 - Copy/paste inside the editor retains normal text selection behavior; press Enter or Tab to save afterward.
 - Saving is optimistic. Failed writes restore that cell's previous value and show an error above the grid; edit again to retry.
 
@@ -93,7 +93,7 @@ Row controls:
 - Finish pending cell saves before adding or deleting rows. Cell editing is disabled briefly during row operations.
 - Pagination uses `(order, id)` boundaries, so deleting the last row of a fetched page does not break loading the next page.
 
-The grid supports horizontal scrolling with 240px-wide columns, keeping the row-number/delete gutter pinned. Arrow/Tab navigation scrolls the selected column into view. Rows remain virtualized for vertical scrolling.
+The grid supports horizontal scrolling with columns initially 240px wide, keeping the row-number/delete gutter pinned. Drag a header’s right edge to resize from 160–640px, or focus its resize handle and use Left/Right arrows; Home resets to 240px. Widths persist per table/column in the same browser. Arrow/Tab navigation scrolls the selected column into view. Rows remain virtualized for vertical scrolling.
 
 Column controls:
 
@@ -114,7 +114,7 @@ The selection is local to the current view and resets on reload. Changing sortin
 
 Verify with a development database: sort text and numbers both ways, clear some cells, scroll through multiple pages, edit the sorted column, add/delete rows, convert/delete the sorted column, and return to default order. Confirm failed cell saves restore their values. Confirm controls wait for pending saves, and Arrow/Tab navigation still works after loading another page.
 
-Optional database tests run only when `SORT_TEST_DATABASE_URL` is explicitly supplied. Use a dedicated **local** PostgreSQL database with permission to create schemas. They create and remove a uniquely named temporary schema; they do not use the application's `DATABASE_URL`. The tests check real PostgreSQL ordering, pagination after cursor deletion, ownership, changed column types and timings with 100,000 synthetic rows.
+Optional database tests run only when `SORT_TEST_DATABASE_URL` is explicitly supplied. Use a dedicated **local** PostgreSQL database with permission to create schemas. They create and remove a uniquely named temporary schema; they do not use the application's `DATABASE_URL`. The tests check real PostgreSQL ordering, pagination after cursor deletion, ownership, changed column types and timings with 100,000 synthetic rows. They also verify bulk paste positions, invalid-number/cross-table rejection, real transaction rollback after an injected write failure and a 1,000-cell paste timing.
 
 ```sh
 SORT_TEST_DATABASE_URL='postgresql://USER:PASSWORD@localhost:5432/LOCAL_TEST_DB' \
@@ -152,3 +152,16 @@ npm run lint
 Verify authentication manually: sign in from `/`, open a table and sign out from its header. Confirm you return to `/` and visiting `/dashboard` while signed out redirects to login. Sign-in failures should show an error on the login page, and auth buttons should prevent repeated clicks while pending. Automated tests use mocked database access. Verify persistence by editing TEXT and NUMBER cells, clearing values and reloading the page while signed in. Verify rollback by blocking `/api/trpc/cell.updateCell` in browser developer tools, editing and saving a cell, and checking that its previous value is restored. Also test editing different cells while a save is pending and scrolling during saves.
 
 Lint uses the ESLint CLI directly, checks all maintained code, and requires zero warnings. It runs without application credentials. Generated Prisma files, `next-env.d.ts` and `.next/` are excluded. Use `npm run lint:fix` for automatic fixes or `npm run check` for lint and TypeScript together.
+
+## Phase 5 browser validation
+
+Use a dedicated development database and a signed-in browser. The PostgreSQL checks do not verify browser event handling, OAuth or rendering. Record outcomes in [VALIDATION.md](./VALIDATION.md).
+
+1. Create a temporary base/table with three columns (Text, Number, Text) and at least 205 rows. Enter distinct values in a 2×3 rectangle. Shift-click and Shift+arrows should show the expected selected dimensions. Copy/paste into another rectangle; confirm all six values keep their row and column positions, then reload to verify persistence. Also test a single row spanning three columns, reversed selection, blank cells and quoted tabs/newlines from a spreadsheet.
+2. Extend selection across the 200-row page boundary with Shift+Down. Confirm the next page loads and keeps the anchor. Paste across the boundary into existing rows. A paste beyond the final row/column should report an error without creating resources.
+3. Throttle the network and paste. Values should appear before the save finishes, the status should indicate saving, and conflicting controls should stay disabled. Block `/api/trpc/cell.updateCells` and paste again; affected values should restore and the error should remain visible after scrolling. Unblock the endpoint before continuing.
+4. Paste an invalid number into a rectangle containing valid text. No cells should change. Repeat with empty Text and blank Number values; both should clear. Copy/paste inside an editor should retain normal text editing behavior.
+5. Resize columns using drag and keyboard, reload, and confirm widths persist. Reorder columns and verify their widths follow their IDs. Arrow/Tab navigation should keep the focused cell visible beyond the pinned gutter. Another table should retain its own widths.
+6. Repeat range paste with sorting, filtering and search active. The optimistic values should display before confirmation; the view should refresh afterward when affected values change its membership/order. Failed saves should preserve the original values.
+7. On a dedicated large test table, scroll rapidly, navigate between virtualized rows and paste a 1,000-cell range. Use browser Performance tools to record input-to-display latency, frame stalls and network duration separately. Do not run the existing seed script against deployed data.
+8. Sign out, confirm protected routes redirect, and sign back in through Google. Remove the temporary base through its normal deletion confirmation when validation is finished.

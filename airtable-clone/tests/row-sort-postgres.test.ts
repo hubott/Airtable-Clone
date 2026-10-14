@@ -548,6 +548,110 @@ void test(
           );
         },
       );
+      await t.test(
+        "bulk paste preserves a rectangle and PostgreSQL rolls back failed writes",
+        async () => {
+          process.env.SKIP_ENV_VALIDATION = "1";
+          Object.assign(process.env, { NODE_ENV: "test" });
+          const { cellRouter } = await import("../src/server/api/routers/cell");
+          const caller = cellRouter.createCaller({
+            db,
+            headers: new Headers(),
+            session: { user: { id: "owner" }, expires: "2099-01-01" },
+          });
+          const cells = [
+            { rowId: "large-1", columnId: "text", value: "first row" },
+            { rowId: "large-1", columnId: "number", value: "101" },
+            { rowId: "large-2", columnId: "text", value: "second row" },
+            { rowId: "large-2", columnId: "number", value: "202" },
+          ];
+          const saved = await caller.updateCells({ tableId: "table", cells });
+          const persisted = await db.cell.findMany({
+            where: { rowId: { in: ["large-1", "large-2"] } },
+          });
+          for (const cell of saved) {
+            const stored = persisted.find(
+              (entry) =>
+                entry.rowId === cell.rowId && entry.columnId === cell.columnId,
+            );
+            assert.equal(stored?.textValue, cell.textValue);
+            assert.equal(stored?.numberValue, cell.numberValue);
+          }
+          await assert.rejects(
+            caller.updateCells({
+              tableId: "table",
+              cells: [
+                {
+                  ...cells[0],
+                  rowId: "large-1",
+                  columnId: "text",
+                  value: "must not persist",
+                },
+                { rowId: "large-2", columnId: "number", value: "NaN" },
+              ],
+            }),
+            { code: "BAD_REQUEST" },
+          );
+          await assert.rejects(
+            caller.updateCells({
+              tableId: "table",
+              cells: [
+                { rowId: "hidden", columnId: "text", value: "cross-table" },
+              ],
+            }),
+            { code: "NOT_FOUND" },
+          );
+          // Force a database failure after the first upsert, proving actual rollback.
+          await db.$executeRawUnsafe(
+            `CREATE FUNCTION reject_paste() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW."numberValue" = 999999 THEN RAISE EXCEPTION 'forced paste failure'; END IF; RETURN NEW; END $$`,
+          );
+          await db.$executeRawUnsafe(
+            `CREATE TRIGGER reject_paste BEFORE INSERT OR UPDATE ON "Cell" FOR EACH ROW EXECUTE FUNCTION reject_paste()`,
+          );
+          await assert.rejects(
+            caller.updateCells({
+              tableId: "table",
+              cells: [
+                { rowId: "large-1", columnId: "text", value: "must roll back" },
+                { rowId: "large-2", columnId: "number", value: "999999" },
+              ],
+            }),
+          );
+          const after = await db.cell.findMany({
+            where: { rowId: { in: ["large-1", "large-2"] } },
+            orderBy: { id: "asc" },
+          });
+          assert.deepEqual(
+            after,
+            [...persisted].sort((a, b) =>
+              a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+            ),
+          );
+          await db.$executeRawUnsafe(`DROP TRIGGER reject_paste ON "Cell"`);
+          await db.$executeRawUnsafe(`DROP FUNCTION reject_paste()`);
+          const batch = Array.from({ length: 500 }, (_, index) => [
+            {
+              rowId: `large-${index + 1}`,
+              columnId: "text",
+              value: `Pasted ${index}`,
+            },
+            {
+              rowId: `large-${index + 1}`,
+              columnId: "number",
+              value: String(index),
+            },
+          ]).flat();
+          const started = performance.now();
+          assert.equal(
+            (await caller.updateCells({ tableId: "table", cells: batch }))
+              .length,
+            1000,
+          );
+          t.diagnostic(
+            `100k rows: atomic 1,000-cell paste ${(performance.now() - started).toFixed(1)}ms (includes tRPC middleware)`,
+          );
+        },
+      );
     } finally {
       await db.$disconnect();
       await admin.$executeRawUnsafe(
