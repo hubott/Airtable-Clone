@@ -16,7 +16,7 @@ An Airtable-style application for organizing projects in editable spreadsheet ta
 - Server-side single-column Text/Number filtering with text matching, numeric comparisons and empty checks, combined with sorting.
 - Server-side single-column Text/Number sorting in either direction, with blanks last and stable pagination.
 - Virtualized rows and cursor pagination that survives row deletion.
-- Arrow/Tab keyboard navigation and single-cell copy/paste.
+- Arrow/Tab keyboard navigation, Shift-click/Shift-arrow range selection and multi-cell spreadsheet copy/paste. Paste up to 1,000 cells with immediate optimistic display, atomic saves and rollback into existing rows/columns.
 
 ## Local development
 
@@ -39,4 +39,4 @@ npm test
 
 ESLint checks maintained code with zero warnings allowed. Most backend tests use mocked database access. Optional PostgreSQL view tests exercise real search, sorting, filtering, pagination and a 100,000-row synthetic dataset; see the local development guide. Real Google sign-in and editing flows need authenticated browser verification.
 
-Project architecture, coding conventions and development priorities are in [AGENTS.md](../AGENTS.md). Core base/table management is complete. Phase 5 includes sorting, filtering and table search. Column resizing is implemented. Next planned work: range selection and multi-cell copy/paste.
+Project architecture, coding conventions and development priorities are in [AGENTS.md](../AGENTS.md). Core base/table management is complete. Phase 5 includes sorting, filtering and table search. Column resizing is implemented. Range selection and multi-cell copy/paste are implemented. Next planned work: authenticated browser validation, large-dataset performance and portfolio polish.

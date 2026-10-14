@@ -1,7 +1,6 @@
 "use client";
 
 import { memo, useRef, useState } from "react";
-import { readSingleCellClipboard } from "~/utils/cell-clipboard";
 import type { CellDirection } from "~/utils/cell-navigation";
 import { parseCellValue } from "~/utils/cell-value";
 
@@ -13,10 +12,18 @@ type Props = {
   value: string | number | null;
   width: number | string;
   disabled?: boolean;
+  selected?: boolean;
+  onSelect?: (
+    rowId: string,
+    columnId: string,
+    extend: boolean,
+    focusOnly?: boolean,
+  ) => void;
   onNavigate?: (
     rowId: string,
     columnId: string,
     direction: CellDirection,
+    extend?: boolean,
   ) => boolean;
   onSave: (
     rowId: string,
@@ -41,6 +48,8 @@ export const EditableCell = memo(function EditableCell({
   onSave,
   disabled = false,
   onNavigate,
+  onSelect,
+  selected = false,
 }: Props) {
   const cellRef = useRef<HTMLTableCellElement>(null);
   const savingRef = useRef(false);
@@ -104,45 +113,29 @@ export const EditableCell = memo(function EditableCell({
       title={
         error ?? (saving ? "Saving…" : "Double-click or press Enter to edit")
       }
-      className={`relative h-full min-w-0 shrink-0 border border-gray-300 px-2 py-1 focus-within:z-10 focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-blue-500 ${error ? "bg-red-50" : saving ? "bg-blue-50" : "bg-white"}`}
+      className={`relative h-full min-w-0 shrink-0 border border-gray-300 px-2 py-1 focus-within:z-10 focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-blue-500 ${error ? "bg-red-50" : saving || selected ? "bg-blue-50" : "bg-white"}`}
       style={{
         width: typeof width === "number" ? `${width}%` : width,
         minHeight: 36,
+      }}
+      data-selected={selected || undefined}
+      onPointerDown={(event) => {
+        if (!editing && !disabled && event.button === 0) {
+          // Use grid selection rather than the browser's selection of cell text.
+          event.preventDefault();
+          window.getSelection()?.removeAllRanges();
+          onSelect?.(rowId, columnId, event.shiftKey);
+          cellRef.current?.focus();
+        }
+      }}
+      onFocus={(event) => {
+        if (event.target === event.currentTarget && !disabled)
+          onSelect?.(rowId, columnId, false, true);
       }}
       onClick={() => {
         if (!editing) cellRef.current?.focus();
       }}
       onDoubleClick={startEditing}
-      onCopy={(event) => {
-        if (editing || document.activeElement !== cellRef.current) return;
-        event.preventDefault();
-        event.clipboardData.setData("text/plain", String(value ?? ""));
-      }}
-      onPaste={(event) => {
-        if (editing || document.activeElement !== cellRef.current) return;
-        event.preventDefault();
-        if (disabled || savingRef.current) {
-          setError(
-            "Wait for the current save or row operation to finish before pasting.",
-          );
-          return;
-        }
-        if (!event.clipboardData.types.includes("text/plain")) {
-          setError("Paste a text or numeric value.");
-          return;
-        }
-        try {
-          const pastedValue = readSingleCellClipboard(
-            event.clipboardData.getData("text/plain"),
-          );
-          setError(null);
-          void save(undefined, pastedValue);
-        } catch (cause) {
-          setError(
-            cause instanceof Error ? cause.message : "Could not paste value",
-          );
-        }
-      }}
       onKeyDown={(event) => {
         if (
           disabled ||
@@ -161,7 +154,12 @@ export const EditableCell = memo(function EditableCell({
         };
         const direction = directions[event.key];
         if (direction) {
-          const handled = onNavigate?.(rowId, columnId, direction);
+          const handled = onNavigate?.(
+            rowId,
+            columnId,
+            direction,
+            event.shiftKey && event.key !== "Tab",
+          );
           if (handled || event.key !== "Tab") event.preventDefault();
           return;
         }
