@@ -35,7 +35,8 @@ export default function RowFilterControls({
 
   return (
     <form
-      className="mb-3 rounded border border-slate-200 bg-slate-50 p-3"
+      className="mb-3 min-w-0 rounded-xl border border-slate-200 bg-white p-4"
+      aria-label="Filter table rows"
       onSubmit={(event) => {
         event.preventDefault();
         if (!column || disabled) return;
@@ -49,12 +50,12 @@ export default function RowFilterControls({
       }}
     >
       <div className="flex flex-wrap items-center gap-3 text-sm">
-        <label className="flex items-center gap-2">
+        <label className="flex w-full min-w-0 flex-col items-start gap-1.5 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
           Filter by
           <select
             value={column?.id ?? ""}
             disabled={disabled}
-            className="rounded border border-slate-300 bg-white px-2 py-1"
+            className="w-full min-w-0 rounded border border-slate-300 bg-white px-3 py-2 sm:w-auto sm:max-w-64"
             onChange={(event) => {
               const next = columns.find(
                 (entry) => entry.id === event.target.value,
@@ -75,12 +76,12 @@ export default function RowFilterControls({
         </label>
         {column && (
           <>
-            <label className="flex items-center gap-2">
+            <label className="flex w-full min-w-0 flex-col items-start gap-1.5 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
               Condition
               <select
                 value={operator}
                 disabled={disabled}
-                className="rounded border border-slate-300 bg-white px-2 py-1"
+                className="w-full min-w-0 rounded border border-slate-300 bg-white px-3 py-2 sm:w-auto sm:max-w-64"
                 onChange={(event) => {
                   setOperator(event.target.value);
                   setError(null);
@@ -94,7 +95,7 @@ export default function RowFilterControls({
               </select>
             </label>
             {needsValue && (
-              <label className="flex items-center gap-2">
+              <label className="flex w-full min-w-0 flex-col items-start gap-1.5 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
                 Value
                 <input
                   value={value}
@@ -106,7 +107,7 @@ export default function RowFilterControls({
                     setValue(event.target.value);
                     setError(null);
                   }}
-                  className="w-48 rounded border border-slate-300 bg-white px-2 py-1"
+                  className="w-full min-w-0 rounded border border-slate-300 bg-white px-3 py-2 sm:w-48"
                 />
               </label>
             )}
@@ -115,7 +116,7 @@ export default function RowFilterControls({
         <button
           type="submit"
           disabled={disabled || !column}
-          className="rounded bg-blue-600 px-3 py-1 text-white disabled:opacity-50"
+          className="rounded bg-blue-600 px-3 py-2 text-white disabled:opacity-50"
         >
           Apply filter
         </button>
@@ -124,7 +125,7 @@ export default function RowFilterControls({
             type="button"
             disabled={disabled}
             onClick={() => onChange(undefined)}
-            className="rounded border border-slate-300 bg-white px-3 py-1 disabled:opacity-50"
+            className="rounded border border-slate-300 bg-white px-3 py-2 disabled:opacity-50"
           >
             Clear filter
           </button>

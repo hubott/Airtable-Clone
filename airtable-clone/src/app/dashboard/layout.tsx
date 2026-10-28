@@ -9,6 +9,8 @@ export default async function DashboardLayout({
   const session = await auth();
   if (!session?.user) redirect("/");
   return (
-    <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">{children}</main>
+    <main className="mx-auto w-full max-w-7xl min-w-0 px-4 py-6 sm:px-6">
+      {children}
+    </main>
   );
 }

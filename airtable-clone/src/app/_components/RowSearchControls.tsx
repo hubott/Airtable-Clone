@@ -16,7 +16,7 @@ export default function RowSearchControls({
   const [error, setError] = useState<string | null>(null);
   return (
     <form
-      className="mb-3 text-sm"
+      className="mb-3 min-w-0 rounded-xl border border-slate-200 bg-white p-4 text-sm"
       role="search"
       aria-label="Search table rows"
       onSubmit={(event) => {
@@ -32,10 +32,11 @@ export default function RowSearchControls({
       }}
     >
       <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2">
+        <label className="flex w-full min-w-0 flex-col items-start gap-1.5 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
           Search table
           <input
             type="search"
+            maxLength={200}
             value={draft}
             disabled={disabled}
             placeholder="Text or a number"
@@ -47,13 +48,13 @@ export default function RowSearchControls({
               setDraft(event.target.value);
               setError(null);
             }}
-            className="w-64 rounded border border-slate-300 bg-white px-2 py-1"
+            className="w-full min-w-0 rounded border border-slate-300 bg-white px-3 py-2 sm:w-64"
           />
         </label>
         <button
           type="submit"
           disabled={disabled}
-          className="rounded bg-blue-600 px-3 py-1 text-white disabled:opacity-50"
+          className="rounded bg-blue-600 px-3 py-2 text-white disabled:opacity-50"
         >
           Search
         </button>
@@ -62,7 +63,7 @@ export default function RowSearchControls({
             type="button"
             disabled={disabled}
             onClick={() => onChange(undefined)}
-            className="rounded border border-slate-300 px-3 py-1 disabled:opacity-50"
+            className="rounded border border-slate-300 px-3 py-2 disabled:opacity-50"
           >
             Clear search
           </button>
@@ -73,7 +74,7 @@ export default function RowSearchControls({
         Search works with your filter and sort.
       </p>
       {search && (
-        <p role="status" className="mt-1 text-xs text-slate-600">
+        <p role="status" className="mt-1 text-xs break-words text-slate-600">
           Searching for “{search}”.
         </p>
       )}

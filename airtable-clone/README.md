@@ -2,6 +2,8 @@
 
 An Airtable-style application for organizing projects in editable spreadsheet tables. Built as a full-stack portfolio project with Next.js, React, TypeScript, tRPC, Prisma, PostgreSQL and Tailwind CSS.
 
+See the [project overview](../README.md) for architecture, implementation tradeoffs, measured performance and current limits.
+
 ## Current features
 
 - Google sign-in with NextAuth and protected dashboard routes.
@@ -39,4 +41,4 @@ npm test
 
 ESLint checks maintained code with zero warnings allowed. Most backend tests use mocked database access. Optional PostgreSQL view tests exercise real search, sorting, filtering, pagination and a 100,000-row synthetic dataset; see the local development guide. Real Google sign-in and editing flows need authenticated browser verification.
 
-Project architecture, coding conventions and development priorities are in [AGENTS.md](../AGENTS.md). Core base/table management is complete. Phase 5 includes sorting, filtering and table search. Column resizing is implemented. Range selection and multi-cell copy/paste are implemented. Real PostgreSQL checks on 100,000 rows and atomic bulk paste have passed; see [validation results](./VALIDATION.md). Phase 5 browser validation was reported complete by the project owner on 28 October 2026. Portfolio polish is underway, starting with responsive workspace/table cards and clearer empty states.
+Project architecture, coding conventions and development priorities are in [AGENTS.md](../AGENTS.md). Core base/table management is complete. Phase 5 includes sorting, filtering and table search. Column resizing is implemented. Range selection and multi-cell copy/paste are implemented. Real PostgreSQL checks on 100,000 rows and atomic bulk paste have passed; see [validation results](./VALIDATION.md). Phase 5 browser validation was reported complete by the project owner on 28 October 2026. Portfolio polish includes responsive workspace/table cards, clearer empty states, mobile table controls and a detailed project overview. See [DEPLOYMENT.md](./DEPLOYMENT.md) for release configuration and screenshot capture. A branded link-preview image is included; a verified live-demo URL and product screenshots remain.
