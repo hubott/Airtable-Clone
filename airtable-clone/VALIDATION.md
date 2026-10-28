@@ -36,3 +36,7 @@ On 28 October 2026, the project owner reported that all Phase 5 browser checks p
 - [x] Persistent widths, reordered columns and horizontal keyboard navigation
 - [x] Paste under sorting/filtering/search
 - [x] Large-table scrolling and input-to-display timings
+
+## Public deployment
+
+On 28 October 2026, the project owner supplied the [public demo URL](https://airtable-clone-roan-iota.vercel.app/) and reported Vercel hosting with Neon PostgreSQL. An unauthenticated fetch returned HTTP 200, the “Airtable Clone” page title and “Continue with Google” content. This confirms public login-page availability; it does not independently verify OAuth completion, database connectivity or authenticated production editing. Earlier browser-check results above remain the owner's report.

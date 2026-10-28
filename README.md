@@ -4,6 +4,8 @@ A full-stack spreadsheet application for organizing records in private workspace
 
 Built as a portfolio and learning project with Next.js, React, TypeScript, tRPC, Prisma and PostgreSQL. The work focuses on responsive editing, database authorization, reliable pagination and safe concurrent writes.
 
+**[Live demo](https://airtable-clone-roan-iota.vercel.app/)** — Google sign-in required. Hosted on Vercel with Neon PostgreSQL.
+
 [Deployment and screenshots](./airtable-clone/DEPLOYMENT.md) · [Local setup](./airtable-clone/LOCAL_DEVELOPMENT.md) · [Application commands](./airtable-clone/README.md) · [Validation results](./airtable-clone/VALIDATION.md)
 
 ## What you can do
@@ -81,7 +83,7 @@ These are single-run local measurements, not production latency or browser rende
 
 Columns support Text and Number. A view supports one sort and one filter alongside table-wide search. Search/filter/sort settings reset on reload; column widths persist locally in the browser. Range paste targets existing rows and columns and is limited to 1,000 cells/1 MB. Changes from another browser require refreshing the view.
 
-This is a portfolio implementation rather than a complete Airtable replacement. Real-time collaboration, formulas, additional column types and persisted named views are outside the current scope. Portfolio polish is in progress; deployment instructions and a branded link-preview image are available; a verified live-demo URL and product screenshots remain to be added.
+This is a portfolio implementation rather than a complete Airtable replacement. Real-time collaboration, formulas, additional column types and persisted named views are outside the current scope. Portfolio polish is in progress; deployment instructions and a branded link-preview image are available; the live demo is hosted on Vercel with Neon PostgreSQL, and product screenshots remain to be added.
 
 ## Project map
 

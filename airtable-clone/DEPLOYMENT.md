@@ -1,6 +1,10 @@
 # Deployment and portfolio presentation
 
-This guide prepares a Vercel release. It does not publish the app or modify a deployed database.
+The project owner reports that the app is deployed on Vercel with Neon PostgreSQL.
+
+**[Live demo](https://airtable-clone-roan-iota.vercel.app/)** — Google sign-in required.
+
+This guide documents release configuration and screenshot capture. Updating these instructions does not publish the app or modify its database.
 
 ## Project configuration
 
@@ -50,7 +54,7 @@ A fresh build downloads the configured Google font. Verify in production mode lo
 
 After an authorized deployment, verify Google sign-in/out, protected-route redirects, base/table navigation, edit persistence after reload and a 2×3 range paste. Verify failure rollback and resizing persistence using disposable demo records. Confirm `/test` returns 404 and `/opengraph-image` returns the branded PNG. The preview image contains only static product copy, with no account or workspace data.
 
-Once the stable public URL is verified, add it to the root README as a Live demo link. Leave reviewers a short note that Google sign-in is required. Record deployment verification separately from the existing local build and PostgreSQL results.
+The public demo URL is linked from both READMEs with a Google sign-in note. Update those links if the public origin changes. Record deployment verification separately from the existing local build and PostgreSQL results.
 
 ## Screenshot capture
 
