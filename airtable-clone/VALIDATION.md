@@ -18,15 +18,21 @@ Paste timing includes tRPC middleware and 1,000 sequential upserts. These are si
 
 Reproduce using the dedicated local database command in [LOCAL_DEVELOPMENT.md](./LOCAL_DEVELOPMENT.md). Never substitute a deployed database URL.
 
-## Pending browser checks
+## Production build
 
-Authenticated browser validation has not been completed. No browser-control tool is available in this session. Follow the Phase 5 checklist in [LOCAL_DEVELOPMENT.md](./LOCAL_DEVELOPMENT.md), then record browser/version, development dataset size, results and observed rendering timings here.
+`npm run build` passed on 14 October 2026, including compilation, lint, TypeScript, static-page generation and build tracing. The table route reported 168 kB of first-load JavaScript. The initial sandboxed attempt could not resolve Google Fonts; the build passed when network access was available. This verifies build readiness, not deployed behavior or browser rendering performance.
 
-- [ ] Google sign-in/out and protected navigation
-- [ ] 2×3 and 1×3 copy/paste geometry and reload persistence
-- [ ] Virtualized selection/paste across a page boundary
-- [ ] Optimistic display, failure rollback and pending controls
-- [ ] Numeric validation, blanks and native editor clipboard behavior
-- [ ] Persistent widths, reordered columns and horizontal keyboard navigation
-- [ ] Paste under sorting/filtering/search
-- [ ] Large-table scrolling and input-to-display timings
+For browser performance validation, run `npm run start` after a successful build and use the checklist below. Production mode avoids development-mode rendering overhead.
+
+## Browser checks
+
+On 28 October 2026, the project owner reported that all Phase 5 browser checks passed and authorized moving to the next development priority. The items below record that user-reported validation, rather than an automated browser run. Browser/version, dataset size and numeric rendering timings were not supplied. The checklist remains in [LOCAL_DEVELOPMENT.md](./LOCAL_DEVELOPMENT.md) for future regression checks.
+
+- [x] Google sign-in/out and protected navigation
+- [x] 2×3 and 1×3 copy/paste geometry and reload persistence
+- [x] Virtualized selection/paste across a page boundary
+- [x] Optimistic display, failure rollback and pending controls
+- [x] Numeric validation, blanks and native editor clipboard behavior
+- [x] Persistent widths, reordered columns and horizontal keyboard navigation
+- [x] Paste under sorting/filtering/search
+- [x] Large-table scrolling and input-to-display timings

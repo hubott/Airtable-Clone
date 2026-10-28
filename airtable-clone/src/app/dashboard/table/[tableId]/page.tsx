@@ -860,7 +860,7 @@ export default function TablePage() {
         <span aria-hidden="true">←</span>
         Back to base
       </Link>
-      <div className="mb-2 flex items-center gap-2">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
         <h1
           className="min-w-0 truncate text-xl font-semibold"
           title={table.name}
@@ -889,8 +889,8 @@ export default function TablePage() {
           </p>
           <p>
             Drag a column’s right edge to resize. Focus the resize handle and
-            use Left/Right arrows; Home resets its width. Widths last until you
-            reload.
+            use Left/Right arrows; Home resets its width. Widths are saved in
+            this browser.
           </p>
           <p>
             Shift-click or Shift+arrows selects a range. Ctrl/Cmd+C copies the

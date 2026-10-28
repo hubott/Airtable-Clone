@@ -3,11 +3,9 @@
 
 import { useRouter } from "next/navigation";
 import CreateResourceForm from "~/app/_components/CreateResourceForm";
-import DeleteResourceButton from "~/app/_components/DeleteResourceButton";
-import ResourceNameEditor from "~/app/_components/ResourceNameEditor";
+import ResourceCard from "~/app/_components/ResourceCard";
 import LoadingSpinner from "~/app/_components/LoadingSpinner";
 import { api } from "~/trpc/react";
-import Link from "next/link";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -16,11 +14,28 @@ export default function Dashboard() {
   const { data: bases, isLoading, error } = api.base.getUserBases.useQuery();
 
   if (isLoading) return <LoadingSpinner label="Loading your bases…" />;
-  if (error) return <p role="alert">{error.message}</p>;
+  if (error)
+    return (
+      <p
+        role="alert"
+        className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800"
+      >
+        {error.message}
+      </p>
+    );
 
   return (
-    <div className="p-4">
-      <h1 className="mb-4 text-2xl font-bold">Your Bases</h1>
+    <div className="min-w-0">
+      <div className="mb-6">
+        <p className="mb-2 text-xs font-semibold tracking-widest text-blue-600 uppercase">
+          Workspace
+        </p>
+        <h1 className="text-3xl font-semibold tracking-tight">Your bases</h1>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Keep related tables together in a base. Choose a workspace or create a
+          new one.
+        </p>
+      </div>
       <CreateResourceForm
         resource="base"
         onCreate={async (name) => {
@@ -34,30 +49,32 @@ export default function Dashboard() {
         }}
       />
       {!bases?.length && (
-        <p className="text-slate-600">
-          No bases yet. Create your first base to organize your tables.
-        </p>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
+          <h2 className="text-lg font-semibold">
+            Your first workspace starts here
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+            Create a base above, then add tables for your projects, tasks or
+            ideas.
+          </p>
+        </div>
       )}
-      <ul className="space-y-2">
+      {!!bases?.length && (
+        <h2 className="mb-3 text-sm font-medium text-slate-600">
+          {bases.length} {bases.length === 1 ? "base" : "bases"}
+        </h2>
+      )}
+      <ul
+        aria-label="Your bases"
+        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+      >
         {bases?.map((base) => (
-          <li
+          <ResourceCard
             key={base.id}
-            className="flex flex-wrap items-center gap-2 rounded border bg-white p-2"
-          >
-            <Link
-              href={`/dashboard/base/${base.id}`}
-              className="min-w-0 flex-1 rounded p-2 hover:bg-gray-100"
-              title={base.name}
-            >
-              <span className="block truncate">{base.name}</span>
-            </Link>
-            <ResourceNameEditor resource="base" id={base.id} name={base.name} />
-            <DeleteResourceButton
-              resource="base"
-              id={base.id}
-              name={base.name}
-            />
-          </li>
+            resource="base"
+            id={base.id}
+            name={base.name}
+          />
         ))}
       </ul>
     </div>
