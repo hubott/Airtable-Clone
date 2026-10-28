@@ -70,7 +70,7 @@ export default function CreateResourceForm({
             }
           }}
         >
-          <div>
+          <div className="w-full min-w-0 sm:w-auto">
             <label
               htmlFor={`${id}-name`}
               className="mb-1 block text-sm font-medium"
@@ -91,7 +91,7 @@ export default function CreateResourceForm({
               placeholder={
                 resource === "base" ? "e.g. Project workspace" : "e.g. Tasks"
               }
-              className="rounded border border-slate-300 px-3 py-2 text-sm focus:outline-2 focus:outline-blue-500"
+              className="w-full min-w-0 rounded border border-slate-300 px-3 py-2 text-sm focus:outline-2 focus:outline-blue-500"
             />
           </div>
           <button

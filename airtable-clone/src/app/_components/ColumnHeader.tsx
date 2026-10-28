@@ -14,6 +14,7 @@ export default function ColumnHeader({
   name,
   type,
   width,
+  onResize,
   onDelete,
   onChangeType,
   onMove,
@@ -26,6 +27,7 @@ export default function ColumnHeader({
   name: string;
   type: "TEXT" | "NUMBER";
   width: string;
+  onResize: (width: number) => void;
   onDelete: () => void;
   onChangeType: () => void;
   onMove: (direction: "left" | "right") => void;
@@ -33,6 +35,13 @@ export default function ColumnHeader({
   canMoveRight: boolean;
   deleteDisabled?: boolean;
 }) {
+  const drag = useRef<{
+    pointerId: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+  const resize = (value: number) =>
+    onResize(Math.max(160, Math.min(640, value)));
   const utils = api.useUtils();
   const returnFocus = useRef(false);
   const [editing, setEditing] = useState(false);
@@ -70,7 +79,7 @@ export default function ColumnHeader({
   return (
     <th
       scope="col"
-      className="overflow-hidden border border-gray-300 px-2 py-1 text-left"
+      className="relative overflow-hidden border border-gray-300 px-2 py-1 pr-3 text-left"
       style={{ width }}
     >
       {editing ? (
@@ -218,6 +227,55 @@ export default function ColumnHeader({
           </svg>
         </button>
       )}
+      <button
+        type="button"
+        aria-label={`Resize column ${name}`}
+        aria-describedby={`resize-help-${columnId}`}
+        title="Drag to resize; Left/Right adjusts width; Home resets"
+        className="absolute inset-y-0 right-0 w-2 cursor-col-resize touch-none bg-transparent hover:bg-blue-300 focus-visible:bg-blue-300 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600"
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          event.currentTarget.focus();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          drag.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startWidth: Number.parseFloat(width),
+          };
+        }}
+        onPointerMove={(event) => {
+          const active = drag.current;
+          if (active?.pointerId === event.pointerId)
+            resize(active.startWidth + event.clientX - active.startX);
+        }}
+        onPointerUp={(event) => {
+          if (drag.current?.pointerId === event.pointerId) {
+            drag.current = null;
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+        }}
+        onPointerCancel={() => {
+          drag.current = null;
+        }}
+        onLostPointerCapture={() => {
+          drag.current = null;
+        }}
+        onKeyDown={(event) => {
+          if (!["ArrowLeft", "ArrowRight", "Home"].includes(event.key)) return;
+          event.preventDefault();
+          resize(
+            event.key === "Home"
+              ? 240
+              : Number.parseFloat(width) +
+                  (event.key === "ArrowRight" ? 16 : -16),
+          );
+        }}
+      />
+      <span id={`resize-help-${columnId}`} className="sr-only">
+        Width {width}. Use Left and Right arrows to resize between 160 and 640
+        pixels. Home resets to 240 pixels.
+      </span>
     </th>
   );
 }

@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { replaceCachedCell } from "../src/utils/cell-cache";
+import {
+  replaceCachedCell,
+  replaceCachedCells,
+  captureCachedCells,
+  applyCachedCellChanges,
+} from "../src/utils/cell-cache";
 import { parseCellValue } from "../src/utils/cell-value";
 
 function fixture(): NonNullable<Parameters<typeof replaceCachedCell>[0]> {
@@ -137,5 +142,91 @@ void test("deleted columns are removed from cell caches while unrelated pages re
   assert.equal(
     data.pages[0]?.formattedRows[0]?.cellsByColumnId.col1?.textValue,
     "old",
+  );
+});
+
+void test("confirmed range updates preserve unrelated rows, pages and pagination", () => {
+  const original = fixture();
+  const values = [
+    { rowId: "row1", columnId: "col1", textValue: "new", numberValue: null },
+    { rowId: "row1", columnId: "col2", textValue: null, numberValue: 10 },
+  ];
+  const updated = replaceCachedCells(original, values);
+  assert.ok(updated);
+  assert.deepEqual(updated.pages[0]?.formattedRows[0]?.cellsByColumnId, {
+    col1: values[0],
+    col2: values[1],
+  });
+  assert.equal(
+    updated.pages[0]?.formattedRows[1],
+    original.pages[0]?.formattedRows[1],
+  );
+  assert.equal(updated.pages[1], original.pages[1]);
+  assert.equal(updated.pageParams, original.pageParams);
+  assert.equal(
+    original.pages[0]?.formattedRows[0]?.cellsByColumnId.col1?.textValue,
+    "old",
+  );
+});
+
+void test("failed optimistic paste restores affected cells without losing unrelated edits", () => {
+  const original = fixture();
+  const pasted = [
+    { rowId: "row1", columnId: "col1", textValue: "pasted", numberValue: null },
+    { rowId: "row2", columnId: "col2", textValue: null, numberValue: 42 },
+  ];
+  const previous = captureCachedCells(original, pasted);
+  const optimistic = replaceCachedCells(original, pasted);
+  assert.equal(
+    optimistic?.pages[0]?.formattedRows[0]?.cellsByColumnId.col1?.textValue,
+    "pasted",
+  );
+  assert.equal(
+    optimistic?.pages[0]?.formattedRows[1]?.cellsByColumnId.col2?.numberValue,
+    42,
+  );
+  const other = {
+    rowId: "row1",
+    columnId: "col3",
+    textValue: "unrelated",
+    numberValue: null,
+  };
+  const concurrent = replaceCachedCell(optimistic, "row1", "col3", other);
+  const rolledBack = applyCachedCellChanges(concurrent, previous);
+  assert.equal(
+    rolledBack?.pages[0]?.formattedRows[0]?.cellsByColumnId.col1?.textValue,
+    "old",
+  );
+  assert.equal(
+    rolledBack?.pages[0]?.formattedRows[0]?.cellsByColumnId.col3,
+    other,
+  );
+  assert.equal(
+    rolledBack?.pages[0]?.formattedRows[1]?.cellsByColumnId.col2,
+    undefined,
+  );
+  assert.equal(rolledBack?.pages[1], original.pages[1]);
+  assert.equal(rolledBack?.pageParams, original.pageParams);
+});
+
+void test("confirmed server values reconcile an optimistic paste", () => {
+  const original = fixture();
+  const optimistic = replaceCachedCells(original, [
+    { rowId: "row1", columnId: "col1", textValue: "draft", numberValue: null },
+  ]);
+  const confirmed = {
+    rowId: "row1",
+    columnId: "col1",
+    textValue: "confirmed",
+    numberValue: null,
+  };
+  const reconciled = replaceCachedCells(optimistic, [confirmed]);
+  assert.equal(
+    reconciled?.pages[0]?.formattedRows[0]?.cellsByColumnId.col1,
+    confirmed,
+  );
+  assert.equal(
+    reconciled?.pages[0]?.formattedRows[1],
+    original.pages[0]?.formattedRows[1],
   );
 });

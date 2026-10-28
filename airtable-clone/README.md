@@ -2,6 +2,10 @@
 
 An Airtable-style application for organizing projects in editable spreadsheet tables. Built as a full-stack portfolio project with Next.js, React, TypeScript, tRPC, Prisma, PostgreSQL and Tailwind CSS.
 
+See the [project overview](../README.md) for architecture, implementation tradeoffs, measured performance and current limits.
+
+**[Live demo](https://airtable-clone-roan-iota.vercel.app/)** — Google sign-in required. Hosted on Vercel with Neon PostgreSQL.
+
 ## Current features
 
 - Google sign-in with NextAuth and protected dashboard routes.
@@ -11,9 +15,12 @@ An Airtable-style application for organizing projects in editable spreadsheet ta
 - Editable TEXT and NUMBER cells with validation, optimistic saves and rollback.
 - Column creation, renaming, deletion and safe Text/Number conversions with previews, and column reordering.
 - Bulk creation of 1–1,000 rows per request and confirmed deletion with transactional cell cleanup.
-- Horizontal scrolling with readable column widths and pinned row controls.
+- Resizable columns with pointer and keyboard controls, horizontal scrolling and pinned row controls. Column widths persist on reload in the same browser.
+- Server-side table search across Text and Number cells, combined with filtering and sorting.
+- Server-side single-column Text/Number filtering with text matching, numeric comparisons and empty checks, combined with sorting.
+- Server-side single-column Text/Number sorting in either direction, with blanks last and stable pagination.
 - Virtualized rows and cursor pagination that survives row deletion.
-- Arrow/Tab keyboard navigation and single-cell copy/paste.
+- Arrow/Tab keyboard navigation, Shift-click/Shift-arrow range selection and multi-cell spreadsheet copy/paste. Paste up to 1,000 cells with immediate optimistic display, atomic saves and rollback into existing rows/columns.
 
 ## Local development
 
@@ -34,6 +41,6 @@ npm run check
 npm test
 ```
 
-ESLint checks maintained code with zero warnings allowed. Backend tests use mocked database access; real Google sign-in and database persistence need authenticated browser verification.
+ESLint checks maintained code with zero warnings allowed. Most backend tests use mocked database access. Optional PostgreSQL view tests exercise real search, sorting, filtering, pagination and a 100,000-row synthetic dataset; see the local development guide. Real Google sign-in and editing flows need authenticated browser verification.
 
-Project architecture, coding conventions and development priorities are in [AGENTS.md](../AGENTS.md). Core base/table management is complete. Next planned work: sorting, filtering and search.
+Project architecture, coding conventions and development priorities are in [AGENTS.md](../AGENTS.md). Core base/table management is complete. Phase 5 includes sorting, filtering and table search. Column resizing is implemented. Range selection and multi-cell copy/paste are implemented. Real PostgreSQL checks on 100,000 rows and atomic bulk paste have passed; see [validation results](./VALIDATION.md). Phase 5 browser validation was reported complete by the project owner on 28 October 2026. Portfolio polish includes responsive workspace/table cards, clearer empty states, mobile table controls and a detailed project overview. See [DEPLOYMENT.md](./DEPLOYMENT.md) for release configuration and screenshot capture. A branded link-preview image is included; the live-demo URL is documented, and product screenshots remain.

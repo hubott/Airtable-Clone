@@ -3,13 +3,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import {
+  rangeBounds,
+  readCellRange,
+  writeCellRange,
+  type CellRange,
+} from "~/utils/cell-range";
 import ColumnHeader from "~/app/_components/ColumnHeader";
 import AddColumnForm from "~/app/_components/AddColumnForm";
 import InfoTooltip from "~/app/_components/InfoTooltip";
 import DeleteResourceButton from "~/app/_components/DeleteResourceButton";
 import ResourceNameEditor from "~/app/_components/ResourceNameEditor";
 import LoadingSpinner from "~/app/_components/LoadingSpinner";
-import { api } from "~/trpc/react";
+import RowSearchControls from "~/app/_components/RowSearchControls";
+import RowFilterControls from "~/app/_components/RowFilterControls";
+import { rowFilterKey } from "~/utils/row-filter";
+import RowSortControls from "~/app/_components/RowSortControls";
+import { useQueryClient } from "@tanstack/react-query";
+import { resetRowView } from "~/utils/row-query-cache";
+import { api, type RouterInputs } from "~/trpc/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   getCellDestination,
@@ -20,17 +32,116 @@ import { prependCachedRows, removeCachedRow } from "~/utils/row-cache";
 import { parseCellValue } from "~/utils/cell-value";
 import {
   replaceCachedCell,
+  replaceCachedCells,
+  captureCachedCells,
+  applyCachedCellChanges,
+  type CachedCellChange,
   removeCachedColumn,
   type CellValue,
 } from "~/utils/cell-cache";
 
+type RowView = Pick<
+  RouterInputs["row"]["getRows"],
+  "sort" | "filter" | "search"
+>;
+const EMPTY_VIEW: RowView = {};
 const COLUMN_WIDTH = 240;
 const ROW_CONTROL_WIDTH = 88;
 
+function clipboardCell(target: EventTarget | null) {
+  if (
+    !(target instanceof Element) ||
+    target.closest('input, textarea, [contenteditable="true"]')
+  )
+    return null;
+  return target.closest<HTMLTableCellElement>(
+    "td[data-row-id][data-column-id]",
+  );
+}
+
 export default function TablePage() {
+  const [columnSizing, setColumnSizing] = useState<{
+    tableId: string;
+    widths: Record<string, number>;
+  }>();
+  const [selection, setSelection] = useState<CellRange | null>(null);
+  const { mutateAsync: updateCells } = api.cell.updateCells.useMutation();
   const [tableDeleting, setTableDeleting] = useState(false);
   const params = useParams();
   const tableId = params.tableId as string;
+  const widthStorageKey = `airtable-clone:column-widths:${tableId}`;
+
+  useEffect(() => {
+    setSelection(null);
+    const widths: Record<string, number> = {};
+    try {
+      const stored: unknown = JSON.parse(
+        localStorage.getItem(widthStorageKey) ?? "{}",
+      );
+      if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+        for (const [id, width] of Object.entries(stored)) {
+          if (
+            typeof width === "number" &&
+            Number.isFinite(width) &&
+            width >= 160 &&
+            width <= 640
+          ) {
+            Object.defineProperty(widths, id, {
+              value: width,
+              enumerable: true,
+              configurable: true,
+              writable: true,
+            });
+          }
+        }
+      }
+    } catch {
+      // Missing or unavailable browser storage should not prevent resizing.
+    }
+    setColumnSizing({ tableId, widths });
+  }, [tableId, widthStorageKey]);
+
+  useEffect(() => {
+    // Do not overwrite saved widths before this table has been restored.
+    if (columnSizing?.tableId !== tableId) return;
+    try {
+      localStorage.setItem(
+        widthStorageKey,
+        JSON.stringify(columnSizing.widths),
+      );
+    } catch {
+      // Resizing still works when storage is blocked or full.
+    }
+  }, [columnSizing, tableId, widthStorageKey]);
+
+  const getColumnWidth = useCallback(
+    (columnId: string) =>
+      (columnSizing?.tableId === tableId
+        ? columnSizing.widths[columnId]
+        : undefined) ?? COLUMN_WIDTH,
+    [columnSizing, tableId],
+  );
+  const resizeColumn = (columnId: string, width: number) => {
+    setColumnSizing((current) => ({
+      tableId,
+      widths: {
+        ...(current?.tableId === tableId ? current.widths : {}),
+        [columnId]: width,
+      },
+    }));
+  };
+  const [viewSelection, setViewSelection] = useState<{
+    tableId: string;
+    view: RowView;
+  }>();
+  const view =
+    viewSelection?.tableId === tableId ? viewSelection.view : EMPTY_VIEW;
+  const { sort, filter, search } = view;
+  const rowQuery = useMemo(
+    () => ({ tableId, take: 200, ...view }),
+    [tableId, view],
+  );
+  const viewRefreshNeeded = useRef(false);
   const [focusTarget, setFocusTarget] = useState<{
     rowId: string;
     columnId: string;
@@ -39,6 +150,11 @@ export default function TablePage() {
   const parentRef = useRef<HTMLDivElement>(null);
 
   const utils = api.useUtils();
+  const queryClient = useQueryClient();
+  const resetRows = useCallback(
+    (input: RouterInputs["row"]["getRows"]) => resetRowView(queryClient, input),
+    [queryClient],
+  );
   const { mutateAsync } = api.cell.updateCell.useMutation();
   const { mutateAsync: createRows } = api.row.createRows.useMutation();
   const [rowCount, setRowCount] = useState("1");
@@ -65,6 +181,7 @@ export default function TablePage() {
   const { mutateAsync: changeColumnType } = api.column.changeType.useMutation();
   const rowOperation = useRef(false);
   const [rowBusy, setRowBusy] = useState(false);
+  const [pasting, setPasting] = useState(false);
   const [rowError, setRowError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
@@ -89,7 +206,7 @@ export default function TablePage() {
       const values = parseCellValue(type, value);
       pendingCells.current.add(key);
       setPendingCount(pendingCells.current.size);
-      const query = { tableId, take: 200 };
+      const query = rowQuery;
       let previous: CellValue | undefined;
       let updated = false;
       try {
@@ -110,6 +227,17 @@ export default function TablePage() {
         utils.row.getRows.setInfiniteData(query, (data) =>
           replaceCachedCell(data, rowId, columnId, saved),
         );
+        // Defer reordering until every optimistic save has settled.
+        if (
+          search ||
+          sort?.columnId === columnId ||
+          filter?.columnId === columnId
+        )
+          viewRefreshNeeded.current = true;
+        await utils.row.getRows.invalidate(
+          { tableId: rowQuery.tableId },
+          { refetchType: "none" },
+        );
       } catch (cause) {
         if (updated)
           utils.row.getRows.setInfiniteData(query, (data) =>
@@ -122,10 +250,56 @@ export default function TablePage() {
       } finally {
         pendingCells.current.delete(key);
         setPendingCount(pendingCells.current.size);
+        if (!pendingCells.current.size && viewRefreshNeeded.current) {
+          viewRefreshNeeded.current = false;
+          rowOperation.current = true;
+          setRowBusy(true);
+          navigationRequest.current++;
+          setFocusTarget(null);
+          parentRef.current?.scrollTo({ top: 0 });
+          try {
+            await resetRows(query);
+          } catch {
+            setRowError(
+              "Cell saved, but rows could not be refreshed. Reload the page.",
+            );
+          } finally {
+            rowOperation.current = false;
+            setRowBusy(false);
+          }
+        }
       }
     },
-    [tableId, utils, mutateAsync],
+    [rowQuery, sort, filter, search, utils, mutateAsync, resetRows],
   );
+
+  async function changeView(nextView: RowView) {
+    if (rowOperation.current || pendingCells.current.size) return;
+    rowOperation.current = true;
+    setRowBusy(true);
+    navigationRequest.current++;
+    setFocusTarget(null);
+    setDeleteTarget(null);
+    setSelection(null);
+    setRowError(null);
+    parentRef.current?.scrollTo({ top: 0 });
+    try {
+      await utils.row.getRows.cancel(rowQuery);
+      await resetRows({
+        tableId,
+        take: 200,
+        ...nextView,
+      });
+      setViewSelection({ tableId, view: nextView });
+    } catch (cause) {
+      setRowError(
+        cause instanceof Error ? cause.message : "Could not change the view",
+      );
+    } finally {
+      rowOperation.current = false;
+      setRowBusy(false);
+    }
+  }
 
   async function manageRow(action: "create" | "delete", rowId?: string) {
     if (rowOperation.current || pendingCells.current.size) return;
@@ -140,14 +314,18 @@ export default function TablePage() {
     rowOperation.current = true;
     setRowBusy(true);
     setRowError(null);
-    const query = { tableId, take: 200 };
+    const query = rowQuery;
+    let committed = false;
     try {
       await utils.row.getRows.cancel(query);
       if (action === "create") {
         const createdRows = await createRows({ tableId, count });
-        utils.row.getRows.setInfiniteData(query, (data) =>
-          prependCachedRows(data, createdRows),
-        );
+        committed = true;
+        if (sort || filter || search) await resetRows(query);
+        else
+          utils.row.getRows.setInfiniteData(query, (data) =>
+            prependCachedRows(data, createdRows),
+          );
         parentRef.current?.scrollTo({ top: 0 });
       } else if (rowId) {
         await deleteRow({ rowId });
@@ -156,9 +334,14 @@ export default function TablePage() {
         );
         setDeleteTarget(null);
       }
+      await utils.row.getRows.invalidate({ tableId }, { refetchType: "none" });
     } catch (cause) {
       setRowError(
-        cause instanceof Error ? cause.message : "Could not update rows",
+        committed
+          ? "Rows added, but the view could not be refreshed. Retry loading rows or reload the page."
+          : cause instanceof Error
+            ? cause.message
+            : "Could not update rows",
       );
     } finally {
       rowOperation.current = false;
@@ -180,10 +363,10 @@ export default function TablePage() {
     try {
       await Promise.all([
         utils.table.getTableWithColumns.cancel({ tableId }),
-        utils.row.getRows.cancel({ tableId, take: 200 }),
+        utils.row.getRows.cancel(rowQuery),
       ]);
       await deleteColumn({ columnId });
-      utils.row.getRows.setInfiniteData({ tableId, take: 200 }, (data) =>
+      utils.row.getRows.setInfiniteData(rowQuery, (data) =>
         removeCachedColumn(data, columnId),
       );
       utils.table.getTableWithColumns.setData({ tableId }, (table) =>
@@ -195,6 +378,22 @@ export default function TablePage() {
           : table,
       );
       setColumnDeleteTarget(null);
+      if (
+        search ||
+        sort?.columnId === columnId ||
+        filter?.columnId === columnId
+      ) {
+        const nextView = {
+          ...(search ? { search } : {}),
+          ...(sort && sort.columnId !== columnId ? { sort } : {}),
+          ...(filter && filter.columnId !== columnId ? { filter } : {}),
+        };
+        setViewSelection({ tableId, view: nextView });
+        await resetRows({ tableId, take: 200, ...nextView });
+        navigationRequest.current++;
+        parentRef.current?.scrollTo({ top: 0 });
+      }
+      await utils.row.getRows.invalidate({ tableId }, { refetchType: "none" });
       setFocusTarget(null);
     } catch (cause) {
       setColumnError(
@@ -221,7 +420,7 @@ export default function TablePage() {
     try {
       await Promise.all([
         utils.table.getTableWithColumns.cancel({ tableId }),
-        utils.row.getRows.cancel({ tableId, take: 200 }),
+        utils.row.getRows.cancel(rowQuery),
       ]);
       const column = await changeColumnType({
         columnId: typeTarget.id,
@@ -244,7 +443,10 @@ export default function TablePage() {
       setTypeTarget(null);
       setFocusTarget(null);
       parentRef.current?.scrollTo({ top: 0 });
-      await utils.row.getRows.reset({ tableId, take: 200 });
+      await utils.row.getRows.invalidate({ tableId }, { refetchType: "none" });
+      const nextView = filter?.columnId === column.id ? { sort, search } : view;
+      setViewSelection({ tableId, view: nextView });
+      await resetRows({ tableId, take: 200, ...nextView });
     } catch (cause) {
       setColumnError(
         committed
@@ -305,21 +507,157 @@ export default function TablePage() {
     isFetchingNextPage,
     error: rowsError,
     isLoading: rowsLoading,
-  } = api.row.getRows.useInfiniteQuery(
-    { tableId, take: 200 },
-    {
-      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-      enabled: !!tableId,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-    },
-  );
+    isFetching: rowsFetching,
+  } = api.row.getRows.useInfiniteQuery(rowQuery, {
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: !!tableId,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
 
   /* ---------------- FLATTEN ROWS ---------------- */
   const rows = useMemo(
     () => rowPages?.pages.flatMap((p) => p.formattedRows) ?? [],
     [rowPages],
   );
+
+  const bounds = useMemo(
+    () =>
+      rangeBounds(
+        selection,
+        rows.map((row) => row.id),
+        table?.columns.map((column) => column.id) ?? [],
+      ),
+    [selection, rows, table],
+  );
+  const selectCell = useCallback(
+    (rowId: string, columnId: string, extend: boolean, focusOnly = false) => {
+      setSelection((current) => {
+        if (
+          focusOnly &&
+          current?.end.rowId === rowId &&
+          current.end.columnId === columnId
+        )
+          return current;
+        const end = { rowId, columnId };
+        return { anchor: extend && current ? current.anchor : end, end };
+      });
+    },
+    [],
+  );
+
+  async function pasteRange(rowId: string, columnId: string, text: string) {
+    if (rowOperation.current || pendingCells.current.size || !table) return;
+    rowOperation.current = true;
+    setRowBusy(true);
+    setPasting(true);
+    setRowError(null);
+    navigationRequest.current++;
+    let committed = false;
+    let previous: CachedCellChange[] = [];
+    let optimistic = false;
+    try {
+      const matrix = readCellRange(text);
+      const startRow = rows.findIndex((row) => row.id === rowId);
+      const startColumn = table.columns.findIndex(
+        (column) => column.id === columnId,
+      );
+      if (startRow < 0 || startColumn < 0)
+        throw new Error("Select a cell before pasting.");
+      const width = matrix[0]?.length ?? 0;
+      if (startColumn + width > table.columns.length)
+        throw new Error(
+          "Paste extends beyond the existing columns. Add columns first.",
+        );
+      // Validate all column values before fetching or writing anything.
+      for (const values of matrix)
+        for (const [offset, value] of values.entries()) {
+          const column = table.columns[startColumn + offset];
+          if (column) parseCellValue(column.type, value);
+        }
+      let available = rows;
+      while (available.length < startRow + matrix.length) {
+        const result = await fetchNextPage({ cancelRefetch: false });
+        if (result.error) throw new Error(result.error.message);
+        const next =
+          result.data?.pages.flatMap((page) => page.formattedRows) ?? [];
+        if (next.length <= available.length)
+          throw new Error(
+            "Paste extends beyond the existing rows. Add rows first.",
+          );
+        available = next;
+      }
+      const cells = matrix.flatMap((values, rowOffset) =>
+        values.map((value, columnOffset) => {
+          const row = available[startRow + rowOffset];
+          const column = table.columns[startColumn + columnOffset];
+          if (!row || !column)
+            throw new Error("Paste destination is unavailable.");
+          return { rowId: row.id, columnId: column.id, value };
+        }),
+      );
+      await utils.row.getRows.cancel(rowQuery);
+      const optimisticCells = cells.map((cell) => {
+        const column = table.columns.find(
+          (column) => column.id === cell.columnId,
+        );
+        if (!column) throw new Error("Paste destination is unavailable.");
+        return {
+          rowId: cell.rowId,
+          columnId: cell.columnId,
+          ...parseCellValue(column.type, cell.value),
+        };
+      });
+      previous = captureCachedCells(
+        utils.row.getRows.getInfiniteData(rowQuery),
+        optimisticCells,
+      );
+      utils.row.getRows.setInfiniteData(rowQuery, (data) =>
+        replaceCachedCells(data, optimisticCells),
+      );
+      optimistic = true;
+      const last = cells.at(-1);
+      if (last)
+        setSelection({
+          anchor: { rowId, columnId },
+          end: { rowId: last.rowId, columnId: last.columnId },
+        });
+      const saved = await updateCells({ tableId, cells });
+      committed = true;
+      utils.row.getRows.setInfiniteData(rowQuery, (data) =>
+        replaceCachedCells(data, saved),
+      );
+      await utils.row.getRows.invalidate({ tableId }, { refetchType: "none" });
+      if (
+        search ||
+        cells.some(
+          (cell) =>
+            cell.columnId === sort?.columnId ||
+            cell.columnId === filter?.columnId,
+        )
+      ) {
+        setSelection(null);
+        setFocusTarget(null);
+        parentRef.current?.scrollTo({ top: 0 });
+        await resetRows(rowQuery);
+      }
+    } catch (cause) {
+      if (optimistic && !committed) {
+        utils.row.getRows.setInfiniteData(rowQuery, (data) =>
+          applyCachedCellChanges(data, previous),
+        );
+      }
+      setRowError(
+        committed
+          ? "Paste saved, but the view could not be refreshed. Reload the page."
+          : `Paste failed: ${cause instanceof Error ? cause.message : "Could not paste cells"}.${optimistic ? " Previous values were restored." : ""}`,
+      );
+    } finally {
+      rowOperation.current = false;
+      setRowBusy(false);
+      setPasting(false);
+    }
+  }
 
   /* ---------------- VIRTUALIZER ---------------- */
   // TanStack Virtual invalidates measurements when this callback changes.
@@ -341,8 +679,18 @@ export default function TablePage() {
 
   const virtualItems = rowVirtualizer.getVirtualItems();
   const navigateCell = useCallback(
-    (rowId: string, columnId: string, direction: CellDirection) => {
-      if (rowOperation.current || !table) return false;
+    (
+      rowId: string,
+      columnId: string,
+      direction: CellDirection,
+      extend = false,
+    ) => {
+      if (
+        rowOperation.current ||
+        !table ||
+        ((sort || filter || search) && pendingCells.current.size)
+      )
+        return false;
       const destination = getCellDestination(
         rows.findIndex((row) => row.id === rowId),
         table.columns.findIndex((column) => column.id === columnId),
@@ -356,7 +704,15 @@ export default function TablePage() {
       if (!column) return false;
       const request = ++navigationRequest.current;
       const row = rows[destination.row];
-      if (row) setFocusTarget({ rowId: row.id, columnId: column.id });
+      const focusDestination = (nextRowId: string) => {
+        const end = { rowId: nextRowId, columnId: column.id };
+        setSelection((current) => ({
+          anchor: extend ? (current?.anchor ?? { rowId, columnId }) : end,
+          end,
+        }));
+        setFocusTarget(end);
+      };
+      if (row) focusDestination(row.id);
       else {
         const source = document.activeElement;
         void fetchNextPage({ cancelRefetch: false })
@@ -369,8 +725,7 @@ export default function TablePage() {
             const nextRow = result.data?.pages.flatMap(
               (page) => page.formattedRows,
             )[destination.row];
-            if (nextRow)
-              setFocusTarget({ rowId: nextRow.id, columnId: column.id });
+            if (nextRow) focusDestination(nextRow.id);
             else if (result.error)
               setRowError("Could not load the next row. Try again.");
           })
@@ -378,7 +733,7 @@ export default function TablePage() {
       }
       return true;
     },
-    [rows, table, hasNextPage, fetchNextPage],
+    [rows, table, sort, filter, search, hasNextPage, fetchNextPage],
   );
 
   useEffect(() => {
@@ -395,9 +750,14 @@ export default function TablePage() {
         (column) => column.id === focusTarget.columnId,
       ) ?? -1;
     if (columnIndex >= 0) {
-      const left = ROW_CONTROL_WIDTH + columnIndex * COLUMN_WIDTH;
-      const right = left + COLUMN_WIDTH;
-      if (COLUMN_WIDTH > viewport.clientWidth - ROW_CONTROL_WIDTH)
+      const width = getColumnWidth(focusTarget.columnId);
+      const left =
+        ROW_CONTROL_WIDTH +
+        (table?.columns ?? [])
+          .slice(0, columnIndex)
+          .reduce((total, column) => total + getColumnWidth(column.id), 0);
+      const right = left + width;
+      if (width > viewport.clientWidth - ROW_CONTROL_WIDTH)
         viewport.scrollLeft = left - ROW_CONTROL_WIDTH;
       else if (left < viewport.scrollLeft + ROW_CONTROL_WIDTH)
         viewport.scrollLeft = left - ROW_CONTROL_WIDTH;
@@ -429,11 +789,21 @@ export default function TablePage() {
       cell.focus({ preventScroll: true });
       setFocusTarget(null);
     }
-  }, [focusTarget, rowBusy, rows, table, virtualItems, rowVirtualizer]);
+  }, [
+    focusTarget,
+    rowBusy,
+    rows,
+    table,
+    virtualItems,
+    rowVirtualizer,
+    getColumnWidth,
+  ]);
 
   /* ---------------- INFINITE SCROLL ---------------- */
   useEffect(() => {
     const checkLoadMore = async () => {
+      if (rowOperation.current || pendingCells.current.size || rowsError)
+        return;
       const virtualItems = rowVirtualizer.getVirtualItems();
       const lastItem = virtualItems.at(-1);
       if (!lastItem) return;
@@ -459,6 +829,10 @@ export default function TablePage() {
     return () => el?.removeEventListener("scroll", onScroll);
   }, [
     rows.length,
+    rowsError,
+    pendingCount,
+    rowBusy,
+    columnBusy,
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
@@ -471,8 +845,7 @@ export default function TablePage() {
   }, [rows.length, rowVirtualizer]);
 
   /* ---------------- LOADING STATES ---------------- */
-  if (tableError || rowsError)
-    return <div role="alert">{tableError?.message ?? rowsError?.message}</div>;
+  if (tableError) return <div role="alert">{tableError.message}</div>;
   if (tableLoading || rowsLoading)
     return <LoadingSpinner label="Loading your table…" />;
   if (!table) return <div>Table not found</div>;
@@ -487,7 +860,7 @@ export default function TablePage() {
         <span aria-hidden="true">←</span>
         Back to base
       </Link>
-      <div className="mb-2 flex items-center gap-2">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
         <h1
           className="min-w-0 truncate text-xl font-semibold"
           title={table.name}
@@ -515,8 +888,14 @@ export default function TablePage() {
             while editing.
           </p>
           <p>
-            Ctrl/Cmd+C copies a selected cell. Ctrl/Cmd+V pastes and saves one
-            value.
+            Drag a column’s right edge to resize. Focus the resize handle and
+            use Left/Right arrows; Home resets its width. Widths are saved in
+            this browser.
+          </p>
+          <p>
+            Shift-click or Shift+arrows selects a range. Ctrl/Cmd+C copies the
+            range. Ctrl/Cmd+V pastes up to 1,000 cells from the focused cell.
+            Add destination rows and columns first.
           </p>
         </InfoTooltip>
       </div>
@@ -547,7 +926,9 @@ export default function TablePage() {
                     ? "Changing column type…"
                     : "Deleting column…"
                 : rowBusy
-                  ? "Updating rows…"
+                  ? pasting
+                    ? "Saving pasted cells…"
+                    : "Updating rows…"
                   : saveError || rowError || columnError
                     ? "Some changes could not be saved"
                     : "All changes saved"}
@@ -605,12 +986,36 @@ export default function TablePage() {
         </label>
         <InfoTooltip label="Row management tips">
           <p>
-            New rows appear at the top. Use the trash icon beside a row number
-            to delete it after confirmation.
+            New rows follow the selected sort, or appear at the top in default
+            order. A filter or search may hide new blank rows. Use the trash
+            icon beside a row number to delete it after confirmation.
           </p>
           <p>Finish pending cell saves before adding or deleting rows.</p>
         </InfoTooltip>
       </form>
+      <RowSearchControls
+        key={`${tableId}:${search ?? ""}`}
+        search={search}
+        disabled={rowBusy || columnBusy || tableDeleting || pendingCount > 0}
+        onChange={(nextSearch) =>
+          void changeView({ ...view, search: nextSearch })
+        }
+      />
+      <RowSortControls
+        columns={table.columns}
+        sort={sort}
+        disabled={rowBusy || columnBusy || tableDeleting || pendingCount > 0}
+        onChange={(nextSort) => void changeView({ ...view, sort: nextSort })}
+      />
+      <RowFilterControls
+        key={`${tableId}:${rowFilterKey(filter)}:${table.columns.map((column) => `${column.id}:${column.type}`).join(",")}`}
+        columns={table.columns}
+        filter={filter}
+        disabled={rowBusy || columnBusy || tableDeleting || pendingCount > 0}
+        onChange={(nextFilter) =>
+          void changeView({ ...view, filter: nextFilter })
+        }
+      />
       <div className="mb-3">
         <AddColumnForm tableId={tableId} />
       </div>
@@ -738,6 +1143,28 @@ export default function TablePage() {
           )}
         </div>
       )}
+      {rowsError && (
+        <div
+          role="alert"
+          className="mb-2 flex items-center gap-3 text-sm text-red-700"
+        >
+          <span>Could not load rows: {rowsError.message}</span>
+          <button
+            type="button"
+            disabled={
+              rowBusy ||
+              columnBusy ||
+              tableDeleting ||
+              pendingCount > 0 ||
+              rowsFetching
+            }
+            onClick={() => void changeView(view)}
+            className="underline disabled:opacity-50"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {rowError && (
         <p role="alert" className="mb-2 text-sm text-red-700">
           {rowError}
@@ -779,13 +1206,74 @@ export default function TablePage() {
           </div>
         </div>
       )}
-      {!rows.length && (
+      {!rows.length && !rowsError && (
         <p className="mb-2 text-sm text-gray-600">
-          This table has no rows yet. Add a row to start entering data.
+          {filter || search
+            ? "No rows match your search and filter settings. Change or clear them to see more rows."
+            : "This table has no rows yet. Add a row to start entering data."}
         </p>
       )}
 
+      {bounds && (
+        <p className="mb-2 text-sm text-slate-600" role="status">
+          Selected {bounds.bottom - bounds.top + 1} rows ×{" "}
+          {bounds.right - bounds.left + 1} columns.
+        </p>
+      )}
       <div
+        onCopyCapture={(event) => {
+          if (
+            event.target instanceof Element &&
+            event.target.closest('input, textarea, [contenteditable="true"]')
+          )
+            return;
+          const cell =
+            clipboardCell(event.target) ??
+            clipboardCell(document.activeElement);
+          if (!cell || !event.currentTarget.contains(cell) || !bounds || !table)
+            return;
+          event.preventDefault();
+          event.stopPropagation();
+          const values = rows.slice(bounds.top, bounds.bottom + 1).map((row) =>
+            table.columns.slice(bounds.left, bounds.right + 1).map((column) => {
+              const cell = row.cellsByColumnId[column.id];
+              return String(
+                (column.type === "TEXT"
+                  ? cell?.textValue
+                  : cell?.numberValue) ?? "",
+              );
+            }),
+          );
+          event.clipboardData.setData("text/plain", writeCellRange(values));
+        }}
+        onPasteCapture={(event) => {
+          if (
+            event.target instanceof Element &&
+            event.target.closest('input, textarea, [contenteditable="true"]')
+          )
+            return;
+          const cell =
+            clipboardCell(event.target) ??
+            clipboardCell(document.activeElement);
+          if (!cell || !event.currentTarget.contains(cell)) return;
+          const { rowId, columnId } = cell.dataset;
+          if (!rowId || !columnId) return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (rowOperation.current || pendingCells.current.size) {
+            setRowError("Wait for pending changes before pasting.");
+            return;
+          }
+          if (!event.clipboardData.types.includes("text/plain")) {
+            setRowError("Paste text or spreadsheet cells.");
+            return;
+          }
+          void pasteRange(
+            rowId,
+            columnId,
+            event.clipboardData.getData("text/plain"),
+          );
+        }}
         ref={parentRef}
         onPointerDown={() => {
           navigationRequest.current++;
@@ -796,7 +1284,12 @@ export default function TablePage() {
         <table
           className="table-fixed border-collapse border border-gray-300"
           style={{
-            width: ROW_CONTROL_WIDTH + table.columns.length * COLUMN_WIDTH,
+            width:
+              ROW_CONTROL_WIDTH +
+              table.columns.reduce(
+                (total, column) => total + getColumnWidth(column.id),
+                0,
+              ),
           }}
         >
           <thead className="sticky top-0 z-30 bg-white">
@@ -811,6 +1304,7 @@ export default function TablePage() {
               {table.columns.map((col, columnIndex) => (
                 <ColumnHeader
                   key={col.id}
+                  onResize={(width) => resizeColumn(col.id, width)}
                   columnId={col.id}
                   canMoveLeft={columnIndex > 0}
                   canMoveRight={columnIndex < table.columns.length - 1}
@@ -835,7 +1329,7 @@ export default function TablePage() {
                   tableId={tableId}
                   name={col.name}
                   type={col.type}
-                  width={`${COLUMN_WIDTH}px`}
+                  width={`${getColumnWidth(col.id)}px`}
                 />
               ))}
             </tr>
@@ -904,7 +1398,7 @@ export default function TablePage() {
                       </svg>
                     </button>
                   </td>
-                  {table.columns.map((col) => {
+                  {table.columns.map((col, columnIndex) => {
                     const cell = row.cellsByColumnId?.[col.id];
 
                     return (
@@ -919,8 +1413,16 @@ export default function TablePage() {
                             ? (cell?.textValue ?? null)
                             : (cell?.numberValue ?? null)
                         }
-                        width={`${COLUMN_WIDTH}px`}
+                        width={`${getColumnWidth(col.id)}px`}
                         disabled={rowBusy || columnBusy || tableDeleting}
+                        selected={
+                          !!bounds &&
+                          virtualRow.index >= bounds.top &&
+                          virtualRow.index <= bounds.bottom &&
+                          columnIndex >= bounds.left &&
+                          columnIndex <= bounds.right
+                        }
+                        onSelect={selectCell}
                         onSave={saveCell}
                         onNavigate={navigateCell}
                       />

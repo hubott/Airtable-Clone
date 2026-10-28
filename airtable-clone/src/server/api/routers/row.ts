@@ -1,6 +1,15 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { rowSearchSchema } from "~/utils/row-search";
+import { rowFilterSchema } from "~/utils/row-filter";
 import type { Prisma } from "~/../generated/prisma";
+import {
+  getViewRows,
+  rowCells,
+  rowCursorSchema,
+  rowSortSchema,
+  type RowCursor,
+} from "../queries/view-rows";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 
 // Called inside the insertion transaction; the table lock serializes order allocation.
@@ -100,9 +109,10 @@ export const rowRouter = createTRPCRouter({
     .input(
       z.object({
         tableId: z.string(),
-        cursor: z
-          .object({ id: z.string().min(1), order: z.number().int() })
-          .nullish(),
+        cursor: rowCursorSchema.nullish(),
+        sort: rowSortSchema.optional(),
+        filter: rowFilterSchema.optional(),
+        search: rowSearchSchema,
         take: z.number().int().min(1).max(1000).default(50),
       }),
     )
@@ -114,31 +124,46 @@ export const rowRouter = createTRPCRouter({
       if (!table)
         throw new TRPCError({ code: "NOT_FOUND", message: "Table not found" });
 
-      const rows = await ctx.db.row.findMany({
-        where: {
-          tableId: input.tableId,
-          ...(input.cursor
-            ? {
-                OR: [
-                  { order: { gt: input.cursor.order } },
-                  { order: input.cursor.order, id: { gt: input.cursor.id } },
-                ],
-              }
-            : {}),
-        },
-        take: input.take,
-        orderBy: [{ order: "asc" }, { id: "asc" }],
-        include: {
-          cells: {
-            select: {
-              rowId: true,
-              columnId: true,
-              textValue: true,
-              numberValue: true,
-            },
+      if (
+        (!input.sort && input.cursor?.sort) ||
+        (!input.filter && input.cursor?.filter) ||
+        (!input.search && input.cursor?.search)
+      )
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "View changed. Reload rows from the beginning.",
+        });
+      const sort = input.sort;
+      const viewPage =
+        sort || input.filter || input.search
+          ? await ctx.db.$transaction(
+              (tx) =>
+                getViewRows(tx, {
+                  ...input,
+                  sort,
+                  ownerId: ctx.session.user.id,
+                }),
+              { isolationLevel: "RepeatableRead" },
+            )
+          : null;
+      const rows =
+        viewPage?.rows ??
+        (await ctx.db.row.findMany({
+          where: {
+            tableId: input.tableId,
+            ...(input.cursor
+              ? {
+                  OR: [
+                    { order: { gt: input.cursor.order } },
+                    { order: input.cursor.order, id: { gt: input.cursor.id } },
+                  ],
+                }
+              : {}),
           },
-        },
-      });
+          take: input.take,
+          orderBy: [{ order: "asc" }, { id: "asc" }],
+          include: rowCells,
+        }));
       const formattedRows = rows.map(({ cells, ...row }) => ({
         ...row,
         cellsByColumnId: Object.fromEntries(
@@ -146,8 +171,9 @@ export const rowRouter = createTRPCRouter({
         ),
       }));
       const lastRow = formattedRows.at(-1);
-      const nextCursor =
-        formattedRows.length < input.take
+      const nextCursor: RowCursor | null = viewPage
+        ? viewPage.nextCursor
+        : formattedRows.length < input.take
           ? null
           : lastRow
             ? { id: lastRow.id, order: lastRow.order }

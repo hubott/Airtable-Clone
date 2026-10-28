@@ -1,6 +1,7 @@
 // src/app/dashboard/base/[baseId]/page.tsx
 "use client";
 
+import ResourceCard from "~/app/_components/ResourceCard";
 import CreateResourceForm from "~/app/_components/CreateResourceForm";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -39,20 +40,27 @@ export default function BasePage() {
   if (!base) return <p>No base selected.</p>;
 
   return (
-    <div className="p-4">
+    <div className="min-w-0">
       <Link
         href="/dashboard"
-        className="mb-3 inline-block text-sm text-slate-600 hover:text-blue-600"
+        className="mb-5 inline-block rounded text-sm font-medium text-slate-600 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
       >
         ← Back to dashboard
       </Link>
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <h1 className="min-w-0 truncate text-2xl font-bold" title={base.name}>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <h1
+          className="max-w-full min-w-0 truncate text-3xl font-semibold tracking-tight"
+          title={base.name}
+        >
           {base.name}
         </h1>
         <ResourceNameEditor resource="base" id={base.id} name={base.name} />
         <DeleteResourceButton resource="base" id={base.id} name={base.name} />
       </div>
+      <p className="mb-6 text-sm leading-6 text-slate-600">
+        Organize this workspace with tables. Open one to edit, search and
+        arrange your records.
+      </p>
       <CreateResourceForm
         resource="table"
         onCreate={async (name) => {
@@ -66,34 +74,30 @@ export default function BasePage() {
         }}
       />
       {!tables?.length && (
-        <p className="text-slate-600">
-          No tables yet. Create a table to start entering data.
-        </p>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
+          <h2 className="text-lg font-semibold">Make room for your records</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+            Create a table above. It starts with a Name column and a blank row,
+            ready for your first entry.
+          </p>
+        </div>
       )}
-      <ul className="space-y-2">
+      {!!tables?.length && (
+        <h2 className="mb-3 text-sm font-medium text-slate-600">
+          {tables.length} {tables.length === 1 ? "table" : "tables"}
+        </h2>
+      )}
+      <ul
+        aria-label="Tables in this base"
+        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+      >
         {tables?.map((table) => (
-          <li
+          <ResourceCard
             key={table.id}
-            className="flex flex-wrap items-center gap-2 rounded border bg-white p-2"
-          >
-            <Link
-              href={`/dashboard/table/${table.id}`}
-              className="min-w-0 flex-1 rounded p-2 hover:bg-gray-100"
-              title={table.name}
-            >
-              <span className="block truncate">{table.name}</span>
-            </Link>
-            <ResourceNameEditor
-              resource="table"
-              id={table.id}
-              name={table.name}
-            />
-            <DeleteResourceButton
-              resource="table"
-              id={table.id}
-              name={table.name}
-            />
-          </li>
+            resource="table"
+            id={table.id}
+            name={table.name}
+          />
         ))}
       </ul>
     </div>
